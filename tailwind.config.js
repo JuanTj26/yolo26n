@@ -9,9 +9,9 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans:    ["var(--font-inter)",  "system-ui", "sans-serif"],
-        display: ["var(--font-syne)",   "system-ui", "sans-serif"],
-        mono:    ["var(--font-mono)",   "monospace"],
+        sans:    ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Helvetica", "Arial", "sans-serif"],
+        display: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Helvetica", "Arial", "sans-serif"],
+        mono:    ["SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "ui-monospace", "monospace"],
       },
     },
   },

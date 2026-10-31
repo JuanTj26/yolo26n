@@ -1,26 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Syne, DM_Mono } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const syne = Syne({
-  subsets: ["latin"],
-  variable: "--font-syne",
-  display: "swap",
-  weight: ["700", "800"],
-});
-
-const dmMono = DM_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-  display: "swap",
-  weight: ["400", "500"],
-});
 
 export const metadata: Metadata = {
   title: "YOLO26n Vision — Detección Vehicular en Tiempo Real",
@@ -29,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${inter.variable} ${syne.variable} ${dmMono.variable}`}>
+    <html lang="es">
       <body>{children}</body>
     </html>
   );
