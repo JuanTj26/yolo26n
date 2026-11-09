@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 
 import { useYoloDetector }  from "@/hooks/useYoloDetector";
 import { useVideoSource }   from "@/hooks/useVideoSource";
@@ -179,6 +181,17 @@ export default function DemoPage() {
                 {fps} <span style={{ fontWeight: 300, color: "var(--ink-3)" }}>fps</span>
               </span>
             </div>
+
+            {/* Link to 3D Traffic Dashboard */}
+            <Link
+              href="/dashboard"
+              className="card flex items-center gap-2 px-4 py-2 hover:border-[#f95721] hover:text-[#f95721] transition-all group"
+              style={{ borderRadius: "100px" }}
+            >
+              <span className="h-2 w-2 rounded-full bg-[#f95721]" />
+              <span style={{ fontSize: "12px", fontWeight: 600 }}>Dashboard 3D</span>
+              <ArrowUpRight className="h-3.5 w-3.5 text-zinc-400 group-hover:text-[#f95721] transition-colors" />
+            </Link>
           </motion.div>
         </motion.header>
 

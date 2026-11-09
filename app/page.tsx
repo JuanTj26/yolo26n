@@ -1,5 +1,5 @@
-import DemoPage from "./demo/page";
+import ModernTrafficDashboard from "@/components/ModernTrafficDashboard";
 
 export default function Home() {
-  return <DemoPage />;
+  return <ModernTrafficDashboard />;
 }
