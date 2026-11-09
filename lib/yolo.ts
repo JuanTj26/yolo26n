@@ -157,14 +157,28 @@ export class YoloDetector {
     this.backend   = backend;
     this.modelUrl  = modelUrl;
     this.inputName = session.inputNames[0] ?? "images";
-    this.conf      = opts.confThreshold ?? 0.30;
-    this.iouThr    = opts.iouThreshold  ?? 0.45;
+    this.conf      = opts.confThreshold ?? 0.18; // Sensibilidad optimizada para Hot Wheels y maquetas (0.18 en vez de 0.30)
+    this.iouThr    = opts.iouThreshold  ?? 0.50;
 
     this.canvas    = document.createElement("canvas");
     this.canvas.width  = INPUT_SIZE;
     this.canvas.height = INPUT_SIZE;
     this.ctx   = this.canvas.getContext("2d", { willReadFrequently: true })!;
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "high";
     this.buffer = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
+  }
+
+  public setConfThreshold(conf: number) {
+    this.conf = Math.max(0.04, Math.min(0.95, conf));
+  }
+
+  public getConfThreshold(): number {
+    return this.conf;
+  }
+
+  public setIouThreshold(iou: number) {
+    this.iouThr = Math.max(0.1, Math.min(0.9, iou));
   }
 
   static async create(modelUrl: string, opts: Options = {}): Promise<YoloDetector> {
@@ -224,6 +238,8 @@ export class YoloDetector {
 
     this.ctx.fillStyle = "rgb(114,114,114)";
     this.ctx.fillRect(0, 0, INPUT_SIZE, INPUT_SIZE);
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "high";
     this.ctx.drawImage(video, padX, padY, nw, nh);
 
     const { data } = this.ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);

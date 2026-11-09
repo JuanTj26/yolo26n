@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { VideoSource } from "@/lib/types";
 
 export function useVideoSource(
@@ -29,6 +29,28 @@ export function useVideoSource(
       v.load();
     }
   }, [videoRef]);
+
+  const refreshDevices = useCallback(async () => {
+    try {
+      const list = (await navigator.mediaDevices.enumerateDevices()).filter(
+        (d) => d.kind === "videoinput",
+      );
+      setDevices(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Listen to new camera connections (e.g. Iriun Webcam starting up)
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && navigator.mediaDevices) {
+      navigator.mediaDevices.addEventListener("devicechange", refreshDevices);
+      return () => {
+        navigator.mediaDevices.removeEventListener("devicechange", refreshDevices);
+      };
+    }
+  }, [refreshDevices]);
 
   const startWebcam = useCallback(async (id?: string) => {
     try {
@@ -83,5 +105,6 @@ export function useVideoSource(
     source, stopSource,
     startWebcam, onFile,
     devices, deviceId, setDeviceId,
+    refreshDevices,
   };
 }

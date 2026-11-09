@@ -1,3 +1,5 @@
+export type VehicleType = "sedan" | "suv" | "taxi" | "moto";
+
 export type Car = {
   id: number;
   lane: number;
@@ -5,6 +7,7 @@ export type Car = {
   speed: number;
   color: number;
   targetSpeed: number;
+  vType: VehicleType;
 };
 
 /** Pedestrian walking across or waiting at a crosswalk.
@@ -166,17 +169,24 @@ export function createSim(): Sim {
   ];
 
   for (let l = 0; l < 4; l++) {
-    for (const dist of initialDistances[l] || []) {
+    (initialDistances[l] || []).forEach((dist, idx) => {
+      // Create a nice realistic mix: ~20% motorcycles, ~30% SUVs, ~15% taxis, ~35% sedans
+      const isMoto = (idx === 2 && l % 2 === 0) || (idx === 4 && l % 2 === 1);
+      const isTaxi = idx === 3;
+      const isSUV = idx === 1;
+      const vType: VehicleType = isMoto ? "moto" : isTaxi ? "taxi" : isSUV ? "suv" : "sedan";
+
       sim.cars.push({
         id: sim.nextId++,
         lane: l,
         s: dist,
         speed: 0,
         color: Math.floor(Math.random() * 8),
-        targetSpeed: 8 + Math.random() * 3,
+        targetSpeed: isMoto ? 9.5 + Math.random() * 2 : 8 + Math.random() * 3,
+        vType,
       });
       sim.detected++;
-    }
+    });
   }
 
   // Pre-populate some pedestrians waiting at the curbs
@@ -329,13 +339,18 @@ export function step(sim: Sim, delta: number): void {
     if (sim.spawnTimer[l]! >= spawnInterval && closestToSpawn < START - 8.0) {
       sim.spawnTimer[l] = 0;
       if (sim.cars.length < 44) {
+        const r = Math.random();
+        const vType: VehicleType =
+          r < 0.22 ? "moto" : r < 0.45 ? "suv" : r < 0.65 ? "taxi" : "sedan";
+
         sim.cars.push({
           id: sim.nextId++,
           lane: l,
           s: START,
           speed: 6.5 + Math.random() * 2,
           color: Math.floor(Math.random() * 8),
-          targetSpeed: 8 + Math.random() * 2.5,
+          targetSpeed: vType === "moto" ? 9.5 + Math.random() * 2 : 8 + Math.random() * 2.5,
+          vType,
         });
         sim.detected++;
       }
@@ -343,41 +358,46 @@ export function step(sim: Sim, delta: number): void {
   }
 
   // ───────────────────────────────────────────────────────────
-  // 5. Vehicle physics & collision avoidance
+  // 5. Vehicle physics & collision avoidance (Optimized zero-alloc pass)
   // ───────────────────────────────────────────────────────────
-  // Check which cars are currently inside the central intersection box (|s| < 9.5)
-  const carsInIntersection = sim.cars.filter((c) => c.s > -9.5 && c.s < 9.5);
-  const nsInIntersection = carsInIntersection.some((c) => axisOf(c.lane) === "NS");
-  const ewInIntersection = carsInIntersection.some((c) => axisOf(c.lane) === "EW");
+  // Single-pass partition by lane and check central intersection occupancy (|s| < 9.5)
+  const laneCars: Car[][] = [[], [], [], []];
+  let nsInIntersection = false;
+  let ewInIntersection = false;
+
+  for (let cIdx = 0; cIdx < sim.cars.length; cIdx++) {
+    const c = sim.cars[cIdx]!;
+    laneCars[c.lane]!.push(c);
+    if (c.s > -9.5 && c.s < 9.5) {
+      if (c.lane === 0 || c.lane === 2) nsInIntersection = true;
+      else ewInIntersection = true;
+    }
+  }
+
+  // Pre-calculate which lanes have a pedestrian actively crossing
+  const pedInEntryPath = [false, false, false, false];
+  for (let pIdx = 0; pIdx < sim.pedestrians.length; pIdx++) {
+    const p = sim.pedestrians[pIdx]!;
+    if (p.waiting || p.t <= 0.05 || p.t >= 0.95) continue;
+    const pose = pedestrianPose(p);
+    if (p.crosswalk === 0 && Math.abs(pose.x - 2.0) < 2.5) pedInEntryPath[0] = true;
+    if (p.crosswalk === 1 && Math.abs(pose.z - (-2.0)) < 2.5) pedInEntryPath[1] = true;
+    if (p.crosswalk === 2 && Math.abs(pose.x - (-2.0)) < 2.5) pedInEntryPath[2] = true;
+    if (p.crosswalk === 3 && Math.abs(pose.z - 2.0) < 2.5) pedInEntryPath[3] = true;
+  }
 
   for (let l = 0; l < 4; l++) {
-    const laneCars = sim.cars
-      .filter((c) => c.lane === l)
-      .sort((a, b) => a.s - b.s); // Front cars have smaller s (heading towards -START)
+    const carsInLane = laneCars[l]!.sort((a, b) => a.s - b.s); // Front cars have smaller s
 
     const isMyAxis = sim.green === axisOf(l);
     const isLightGreen = isMyAxis && !sim.yellow && !sim.allRed;
     const isLightYellow = isMyAxis && sim.yellow;
     const conflictingAxisCarsInIntersection = axisOf(l) === "NS" ? ewInIntersection : nsInIntersection;
+    const hasPedInPath = pedInEntryPath[l];
 
-    // Check pedestrians crossing in this lane's path
-    // Lane 0: x=2.0 (crosswalk 0 at z=6.4, crosswalk 2 at z=-6.4)
-    // Lane 1: z=-2.0 (crosswalk 1 at x=6.4, crosswalk 3 at x=-6.4)
-    // Lane 2: x=-2.0
-    // Lane 3: z=2.0
-    const pedInEntryPath = sim.pedestrians.some((p) => {
-      if (p.waiting || p.t <= 0.05 || p.t >= 0.95) return false;
-      const pose = pedestrianPose(p);
-      if (l === 0) return p.crosswalk === 0 && Math.abs(pose.x - 2.0) < 2.5;
-      if (l === 1) return p.crosswalk === 1 && Math.abs(pose.z - (-2.0)) < 2.5;
-      if (l === 2) return p.crosswalk === 2 && Math.abs(pose.x - (-2.0)) < 2.5;
-      if (l === 3) return p.crosswalk === 3 && Math.abs(pose.z - 2.0) < 2.5;
-      return false;
-    });
-
-    for (let i = 0; i < laneCars.length; i++) {
-      const car = laneCars[i]!;
-      const lead = i > 0 ? laneCars[i - 1]! : null;
+    for (let i = 0; i < carsInLane.length; i++) {
+      const car = carsInLane[i]!;
+      const lead = i > 0 ? carsInLane[i - 1]! : null;
 
       // Determine target stop line / reason to stop
       let stopTarget = -START - 10;
@@ -402,7 +422,7 @@ export function step(sim: Sim, delta: number): void {
       }
 
       // 3. Pedestrian yielding: stop if pedestrian is crossing in front of entry
-      if (pedInEntryPath && car.s >= STOP - 0.5) {
+      if (hasPedInPath && car.s >= STOP - 0.5) {
         mustStopAtIntersection = true;
       }
 

@@ -14,6 +14,7 @@ import {
   Sliders,
   ChevronUp,
   ChevronDown,
+  Camera,
 } from "lucide-react";
 import { simRef } from "@/components/TrafficScene";
 import { queueLen } from "@/lib/traffic-sim";
@@ -28,6 +29,21 @@ const TrafficScene = dynamic(() => import("@/components/TrafficScene"), {
         <div className="h-8 w-8 rounded-full border-2 border-[#f95721] border-t-transparent animate-spin" />
         <span className="text-xs font-mono text-zinc-500 uppercase tracking-widest">
           Cargando Simulación 3D...
+        </span>
+      </div>
+    </div>
+  ),
+});
+
+// Dynamic import for YOLO Background Camera view (replaces 3D scene in background)
+const YoloBackgroundCamera = dynamic(() => import("@/components/YoloBackgroundCamera"), {
+  ssr: false,
+  loading: () => (
+    <div className="fixed inset-0 flex items-center justify-center bg-zinc-950 z-0">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 rounded-full border-2 border-[#f95721] border-t-transparent animate-spin" />
+        <span className="text-xs font-mono text-zinc-400 uppercase tracking-widest">
+          Iniciando Cámara YOLO26n...
         </span>
       </div>
     </div>
@@ -63,7 +79,7 @@ export default function ModernTrafficDashboard() {
     pedestrianGreen: true,
   });
 
-  const [viewMode, setViewMode] = useState<"perspective" | "overhead">("perspective");
+  const [viewMode, setViewMode] = useState<"perspective" | "overhead" | "camera">("perspective");
   const [isPaused, setIsPaused] = useState(false);
   const [showDetections, setShowDetections] = useState(true);
   const [showLayerDrawer, setShowLayerDrawer] = useState(false);
@@ -114,14 +130,28 @@ export default function ModernTrafficDashboard() {
   );
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-white select-none">
-      {/* ── 3D Scene in background ── */}
-      <TrafficScene
-        dashboard={true}
-        detections={showDetections}
-        paused={isPaused}
-        overhead={viewMode === "overhead"}
-      />
+    <div
+      className={`relative min-h-screen w-full overflow-hidden select-none transition-colors duration-300 ${viewMode === "camera" ? "bg-zinc-950" : "bg-white"
+        }`}
+    >
+      {/* ── Background Layer: 3D Three.js Scene OR Live YOLO Camera ── */}
+      {viewMode !== "camera" ? (
+        <TrafficScene
+          dashboard={true}
+          detections={showDetections}
+          paused={isPaused}
+          overhead={viewMode === "overhead"}
+        />
+      ) : (
+        <YoloBackgroundCamera
+          onDetections={(count) => {
+            setS((prev) => ({
+              ...prev,
+              onScreen: count,
+            }));
+          }}
+        />
+      )}
 
       {/* ── Top Navbar ── */}
       <header className="fixed top-0 inset-x-0 z-30 px-3 py-2.5 sm:px-6 sm:py-4 flex items-center justify-between pointer-events-none gap-2">
@@ -155,23 +185,32 @@ export default function ModernTrafficDashboard() {
         <div className="pointer-events-auto bg-white/85 hover:bg-white backdrop-blur-xl border border-black/5 shadow-sm rounded-full p-1 flex items-center gap-1 transition-all">
           <button
             onClick={() => setViewMode("perspective")}
-            className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all ${
-              viewMode === "perspective"
-                ? "bg-[#18181b] text-white shadow-sm"
-                : "text-zinc-600 hover:text-zinc-900"
-            }`}
+            className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all ${viewMode === "perspective"
+              ? "bg-[#18181b] text-white shadow-sm"
+              : "text-zinc-600 hover:text-zinc-900"
+              }`}
           >
             Inicio
           </button>
           <button
             onClick={() => setViewMode("overhead")}
-            className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all ${
-              viewMode === "overhead"
-                ? "bg-[#18181b] text-white shadow-sm"
-                : "text-zinc-600 hover:text-zinc-900"
-            }`}
+            className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all ${viewMode === "overhead"
+              ? "bg-[#18181b] text-white shadow-sm"
+              : "text-zinc-600 hover:text-zinc-900"
+              }`}
           >
             Vista aérea
+          </button>
+          <button
+            onClick={() => setViewMode(viewMode === "camera" ? "perspective" : "camera")}
+            className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 ${viewMode === "camera"
+                ? "bg-[#f95721] text-white shadow-sm ring-2 ring-[#f95721]/30"
+                : "text-zinc-600 hover:text-zinc-900"
+              }`}
+            title="Cambiar fondo a Cámara en vivo YOLO26n"
+          >
+            <Camera className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+            <span>Cámara</span>
           </button>
         </div>
 
@@ -184,9 +223,8 @@ export default function ModernTrafficDashboard() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               )}
               <span
-                className={`relative inline-flex rounded-full h-2 w-2 ${
-                  isPaused ? "bg-amber-500" : "bg-emerald-500"
-                }`}
+                className={`relative inline-flex rounded-full h-2 w-2 ${isPaused ? "bg-amber-500" : "bg-emerald-500"
+                  }`}
               />
             </span>
             <span>{isPaused ? "Pausado" : "Ciudad activa"}</span>
@@ -204,9 +242,8 @@ export default function ModernTrafficDashboard() {
           {/* Layer switcher */}
           <button
             onClick={() => setShowLayerDrawer((prev) => !prev)}
-            className={`h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-white/90 hover:bg-white backdrop-blur-md border border-black/5 shadow-sm flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${
-              showLayerDrawer ? "text-[#f95721] ring-2 ring-[#f95721]/30" : "text-zinc-800"
-            }`}
+            className={`h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-white/90 hover:bg-white backdrop-blur-md border border-black/5 shadow-sm flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${showLayerDrawer ? "text-[#f95721] ring-2 ring-[#f95721]/30" : "text-zinc-800"
+              }`}
             title="Capas y opciones"
           >
             <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -215,11 +252,13 @@ export default function ModernTrafficDashboard() {
       </header>
 
       {/* ───────────────────────────────────────────────────────────
-          DESKTOP VIEW (Visible on >= md screens)
+          DESKTOP VIEW (Visible on >= md screens, HIDDEN in camera mode)
           Left column: Visión conectada + En espera
           Right column: Flujo de la ciudad
       ─────────────────────────────────────────────────────────── */}
-      <div className="hidden md:flex fixed top-24 left-6 lg:left-8 z-20 flex-col gap-3 pointer-events-auto w-[250px] lg:w-[270px]">
+      <div className={`hidden md:flex fixed top-24 left-6 lg:left-8 z-20 flex-col gap-3 pointer-events-auto w-[250px] lg:w-[270px] transition-all duration-300 ${
+        viewMode === "camera" ? "opacity-0 pointer-events-none -translate-x-4" : "opacity-100 translate-x-0"
+      }`}>
         {/* Desktop Card 1: Visión conectada */}
         <div className="bg-[#15171a]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-5 text-white shadow-2xl transition-all duration-300 select-text hover:border-white/20">
           <div className="flex items-center justify-between text-xs text-zinc-400">
@@ -249,12 +288,23 @@ export default function ModernTrafficDashboard() {
           </div>
 
           <div className="mt-3 flex items-center justify-between text-[10px] font-mono tracking-wider text-zinc-400 uppercase border-t border-zinc-800/80 pt-2">
-            <span>YOLO26n</span>
+            <span>Autos · Motos · Peatones</span>
             <span className="flex items-center gap-1 text-emerald-400 font-semibold">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               {s.onScreen} EN ESCENA
             </span>
           </div>
+
+          <button
+            onClick={() => setViewMode(viewMode === "camera" ? "perspective" : "camera")}
+            className={`mt-3 w-full py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md active:scale-98 ${viewMode === "camera"
+                ? "bg-zinc-800 text-white border border-white/20 hover:bg-zinc-700"
+                : "bg-[#f95721] hover:bg-[#ff6835] text-white"
+              }`}
+          >
+            <Camera className="h-3.5 w-3.5" />
+            <span>{viewMode === "camera" ? "Volver a Fondo 3D" : "Fondo: Ver Cámara YOLO"}</span>
+          </button>
         </div>
 
         {/* Desktop Card 2: En espera */}
@@ -293,8 +343,8 @@ export default function ModernTrafficDashboard() {
           <div className="mt-2.5 pt-2.5 border-t border-zinc-100 grid grid-cols-2 gap-1.5">
             {[
               { dir: "Norte", sem: "S1", q: s.queues[0] ?? 0, axis: "NS" },
-              { dir: "Este",  sem: "S2", q: s.queues[1] ?? 0, axis: "EW" },
-              { dir: "Sur",   sem: "S3", q: s.queues[2] ?? 0, axis: "NS" },
+              { dir: "Este", sem: "S2", q: s.queues[1] ?? 0, axis: "EW" },
+              { dir: "Sur", sem: "S3", q: s.queues[2] ?? 0, axis: "NS" },
               { dir: "Oeste", sem: "S4", q: s.queues[3] ?? 0, axis: "EW" },
             ].map((item, idx) => {
               const isGreen = !s.allRed && s.green === item.axis;
@@ -302,10 +352,10 @@ export default function ModernTrafficDashboard() {
               const lightCls = s.allRed
                 ? "bg-red-500"
                 : isGreen
-                ? isYellow
-                  ? "bg-amber-400 shadow-[0_0_6px_#fbbf24]"
-                  : "bg-emerald-500 shadow-[0_0_6px_#10b981]"
-                : "bg-red-500";
+                  ? isYellow
+                    ? "bg-amber-400 shadow-[0_0_6px_#fbbf24]"
+                    : "bg-emerald-500 shadow-[0_0_6px_#10b981]"
+                  : "bg-red-500";
 
               return (
                 <div
@@ -341,18 +391,17 @@ export default function ModernTrafficDashboard() {
             <div className="flex items-center gap-1.5">
               {/* Walking person SVG icon */}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-blue-500">
-                <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" />
                 <path d="M9 10l1.5 4L9 18" /><path d="M15 10l-1.5 4L15 18" /><path d="M9.5 10h5" />
               </svg>
               <span>Peatones</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span
-                className={`h-2 w-2 rounded-full transition-colors ${
-                  s.pedestrianGreen
-                    ? "bg-blue-400 shadow-[0_0_6px_#60a5fa]"
-                    : "bg-zinc-400"
-                }`}
+                className={`h-2 w-2 rounded-full transition-colors ${s.pedestrianGreen
+                  ? "bg-blue-400 shadow-[0_0_6px_#60a5fa]"
+                  : "bg-zinc-400"
+                  }`}
               />
               <span className="font-mono font-bold text-zinc-900">{s.pedestrians}</span>
             </div>
@@ -360,8 +409,10 @@ export default function ModernTrafficDashboard() {
         </div>
       </div>
 
-      {/* Desktop Card 3: Flujo de la ciudad */}
-      <div className="hidden md:block fixed top-24 right-6 lg:right-8 z-20 pointer-events-auto w-[250px] lg:w-[270px] select-text">
+      {/* Desktop Card 3: Flujo de la ciudad — HIDDEN in camera mode */}
+      <div className={`hidden md:block fixed top-24 right-6 lg:right-8 z-20 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${
+        viewMode === "camera" ? "opacity-0 pointer-events-none translate-x-4" : "opacity-100 translate-x-0"
+      }`}>
         <div className="bg-[#15171a]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-5 text-white shadow-2xl transition-all duration-300 hover:border-white/20">
           <div className="flex items-center justify-between text-xs text-zinc-400">
             <span className="font-medium text-zinc-200">Flujo de la ciudad</span>
@@ -387,6 +438,121 @@ export default function ModernTrafficDashboard() {
       </div>
 
       {/* ───────────────────────────────────────────────────────────
+          DESKTOP CAMERA HUD (Only on >= md, only in camera mode)
+          Compact bottom capsule + expandable detail panel
+      ─────────────────────────────────────────────────────────── */}
+      {viewMode === "camera" && (
+        <div className="hidden md:block fixed bottom-6 inset-x-6 z-30 pointer-events-auto">
+          {/* Expandable detail panel */}
+          {mobileExpanded && (
+            <div className="mb-3 bg-black/80 backdrop-blur-xl border border-white/15 rounded-2xl p-4 shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200 text-white">
+              <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-3">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setMobileTab("vision")} className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${mobileTab === "vision" ? "bg-white text-zinc-900" : "text-zinc-400 hover:text-white bg-white/10"}`}>Visión</button>
+                  <button onClick={() => setMobileTab("espera")} className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${mobileTab === "espera" ? "bg-white text-zinc-900" : "text-zinc-400 hover:text-white bg-white/10"}`}>En espera</button>
+                  <button onClick={() => setMobileTab("flujo")} className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${mobileTab === "flujo" ? "bg-white text-zinc-900" : "text-zinc-400 hover:text-white bg-white/10"}`}>Flujo</button>
+                </div>
+                <button onClick={() => setMobileExpanded(false)} className="h-7 w-7 rounded-full bg-white/10 flex items-center justify-center text-zinc-300 hover:bg-white/20 transition-colors">
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+
+              {mobileTab === "vision" && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-white/10 rounded-xl p-3 text-center">
+                    <div className="text-3xl font-bold font-mono">{s.detected}</div>
+                    <div className="text-[10px] text-zinc-400 mt-0.5">Detectados total</div>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-3 text-center">
+                    <div className="text-3xl font-bold font-mono text-emerald-400">{s.onScreen}</div>
+                    <div className="text-[10px] text-zinc-400 mt-0.5">En escena</div>
+                  </div>
+                  <div className="bg-white/10 rounded-xl p-3 text-center">
+                    <div className="text-3xl font-bold font-mono text-[#f95721]">{flowPercent}%</div>
+                    <div className="text-[10px] text-zinc-400 mt-0.5">Fluidez</div>
+                  </div>
+                </div>
+              )}
+
+              {mobileTab === "espera" && (
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { dir: "Norte", sem: "S1", q: s.queues[0] ?? 0, axis: "NS" },
+                    { dir: "Este",  sem: "S2", q: s.queues[1] ?? 0, axis: "EW" },
+                    { dir: "Sur",   sem: "S3", q: s.queues[2] ?? 0, axis: "NS" },
+                    { dir: "Oeste", sem: "S4", q: s.queues[3] ?? 0, axis: "EW" },
+                  ].map((item, idx) => {
+                    const isGreen = !s.allRed && s.green === item.axis;
+                    const isYellow = isGreen && s.yellow;
+                    const lightCls = s.allRed ? "bg-red-500" : isGreen ? (isYellow ? "bg-amber-400 shadow-[0_0_6px_#fbbf24]" : "bg-emerald-500 shadow-[0_0_6px_#10b981]") : "bg-red-500";
+                    return (
+                      <div key={idx} className="bg-white/10 rounded-xl p-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <span className={`h-2 w-2 rounded-full ${lightCls}`} />
+                          <span className="text-[11px] font-semibold">{item.dir}</span>
+                        </div>
+                        <div className="text-xl font-bold font-mono">{item.q}</div>
+                        <div className="text-[9px] text-zinc-400 font-mono">{item.sem}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {mobileTab === "flujo" && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-zinc-300">Fluidez del tráfico</span>
+                    <span className="text-2xl font-bold font-mono text-[#f95721]">{flowPercent}%</span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-[#f95721] to-[#ff7e36] rounded-full transition-all duration-500" style={{ width: `${flowPercent}%` }} />
+                  </div>
+                  <div className="mt-2 text-[11px] text-zinc-500">Vehículos en movimiento activo</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Compact bottom capsule HUD */}
+          <div className="bg-black/80 backdrop-blur-xl border border-white/15 rounded-full px-4 py-2.5 shadow-2xl flex items-center justify-between gap-2 text-white">
+            {/* Stats chips */}
+            <div className="flex items-center gap-1">
+              <button onClick={() => { setMobileTab("vision"); setMobileExpanded(e => mobileTab === "vision" ? !e : true); }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${mobileExpanded && mobileTab === "vision" ? "bg-white text-zinc-900" : "text-zinc-300 hover:bg-white/15"}`}>
+                <Scan className="h-3 w-3 text-[#f95721]" />
+                <span className="font-mono font-bold">{s.detected}</span>
+              </button>
+
+              <div className="h-4 w-[1px] bg-white/20" />
+
+              <button onClick={() => { setMobileTab("espera"); setMobileExpanded(e => mobileTab === "espera" ? !e : true); }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${mobileExpanded && mobileTab === "espera" ? "bg-white text-zinc-900" : "text-zinc-300 hover:bg-white/15"}`}>
+                <Activity className="h-3 w-3 text-emerald-400" />
+                <span className="font-mono font-bold">{totalWaiting}</span>
+                <span className="text-[10px] text-zinc-400">espera</span>
+              </button>
+
+              <div className="h-4 w-[1px] bg-white/20" />
+
+              <button onClick={() => { setMobileTab("flujo"); setMobileExpanded(e => mobileTab === "flujo" ? !e : true); }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${mobileExpanded && mobileTab === "flujo" ? "bg-white text-zinc-900" : "text-zinc-300 hover:bg-white/15"}`}>
+                <Leaf className="h-3 w-3 text-[#f95721]" />
+                <span className="font-mono font-bold">{flowPercent}%</span>
+              </button>
+            </div>
+
+            {/* Expand/collapse */}
+            <button onClick={() => setMobileExpanded(e => !e)}
+              className="h-7 w-7 rounded-full bg-white/10 flex items-center justify-center text-zinc-300 hover:bg-white/20 transition-colors flex-shrink-0"
+              title={mobileExpanded ? "Ocultar panel" : "Ver detalles"}>
+              {mobileExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────
           MOBILE VIEW (Only on screens < md)
           1. 3D view is completely open and unobstructed!
           2. Bottom compact HUD capsule (doesn't block roads or cars)
@@ -400,31 +566,28 @@ export default function ModernTrafficDashboard() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setMobileTab("vision")}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                    mobileTab === "vision"
-                      ? "bg-[#18181b] text-white"
-                      : "text-zinc-600 hover:text-zinc-900 bg-zinc-100"
-                  }`}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${mobileTab === "vision"
+                    ? "bg-[#18181b] text-white"
+                    : "text-zinc-600 hover:text-zinc-900 bg-zinc-100"
+                    }`}
                 >
                   Visión
                 </button>
                 <button
                   onClick={() => setMobileTab("espera")}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                    mobileTab === "espera"
-                      ? "bg-[#18181b] text-white"
-                      : "text-zinc-600 hover:text-zinc-900 bg-zinc-100"
-                  }`}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${mobileTab === "espera"
+                    ? "bg-[#18181b] text-white"
+                    : "text-zinc-600 hover:text-zinc-900 bg-zinc-100"
+                    }`}
                 >
                   En espera
                 </button>
                 <button
                   onClick={() => setMobileTab("flujo")}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                    mobileTab === "flujo"
-                      ? "bg-[#18181b] text-white"
-                      : "text-zinc-600 hover:text-zinc-900 bg-zinc-100"
-                  }`}
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${mobileTab === "flujo"
+                    ? "bg-[#18181b] text-white"
+                    : "text-zinc-600 hover:text-zinc-900 bg-zinc-100"
+                    }`}
                 >
                   Flujo
                 </button>
@@ -441,19 +604,31 @@ export default function ModernTrafficDashboard() {
 
             {/* Tab content: Visión */}
             {mobileTab === "vision" && (
-              <div className="mt-3 flex items-center justify-between bg-zinc-900 text-white rounded-xl p-3">
-                <div>
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
-                    Vehículos detectados
-                  </span>
-                  <div className="text-3xl font-bold font-mono">{s.detected}</div>
+              <div className="mt-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between bg-zinc-900 text-white rounded-xl p-3">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                      Vehículos detectados
+                    </span>
+                    <div className="text-3xl font-bold font-mono">{s.detected}</div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400">
+                      {s.onScreen} en escena
+                    </span>
+                    <div className="text-xs text-zinc-400 font-mono">YOLO26n</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400">
-                    {s.onScreen} en escena
-                  </span>
-                  <div className="text-xs text-zinc-400 font-mono">YOLO26n</div>
-                </div>
+                <button
+                  onClick={() => {
+                    setViewMode(viewMode === "camera" ? "perspective" : "camera");
+                    setMobileExpanded(false);
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-[#f95721] hover:bg-[#ff6835] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md active:scale-98 transition-all"
+                >
+                  <Camera className="h-4 w-4" />
+                  <span>{viewMode === "camera" ? "Volver a Fondo 3D" : "Fondo: Ver Cámara YOLO"}</span>
+                </button>
               </div>
             )}
 
@@ -470,8 +645,8 @@ export default function ModernTrafficDashboard() {
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
                     { dir: "Norte", sem: "S1", q: s.queues[0] ?? 0, axis: "NS" },
-                    { dir: "Este",  sem: "S2", q: s.queues[1] ?? 0, axis: "EW" },
-                    { dir: "Sur",   sem: "S3", q: s.queues[2] ?? 0, axis: "NS" },
+                    { dir: "Este", sem: "S2", q: s.queues[1] ?? 0, axis: "EW" },
+                    { dir: "Sur", sem: "S3", q: s.queues[2] ?? 0, axis: "NS" },
                     { dir: "Oeste", sem: "S4", q: s.queues[3] ?? 0, axis: "EW" },
                   ].map((item, idx) => {
                     const isGreen = !s.allRed && s.green === item.axis;
@@ -479,10 +654,10 @@ export default function ModernTrafficDashboard() {
                     const lightCls = s.allRed
                       ? "bg-red-500"
                       : isGreen
-                      ? isYellow
-                        ? "bg-amber-400 shadow-[0_0_6px_#fbbf24]"
-                        : "bg-emerald-500 shadow-[0_0_6px_#10b981]"
-                      : "bg-red-500";
+                        ? isYellow
+                          ? "bg-amber-400 shadow-[0_0_6px_#fbbf24]"
+                          : "bg-emerald-500 shadow-[0_0_6px_#10b981]"
+                        : "bg-red-500";
 
                     return (
                       <div
@@ -504,7 +679,7 @@ export default function ModernTrafficDashboard() {
                 <div className="mt-2 flex items-center justify-between bg-blue-50 rounded-lg px-2.5 py-1.5 border border-blue-100">
                   <div className="flex items-center gap-1.5 text-[11px] font-medium text-blue-700">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                      <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+                      <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" />
                       <path d="M9 10l1.5 4L9 18" /><path d="M15 10l-1.5 4L15 18" /><path d="M9.5 10h5" />
                     </svg>
                     <span>Peatones cruzando</span>
@@ -544,9 +719,8 @@ export default function ModernTrafficDashboard() {
               setMobileTab("vision");
               setMobileExpanded((e) => (mobileTab === "vision" ? !e : true));
             }}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium transition-all ${
-              mobileExpanded && mobileTab === "vision" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"
-            }`}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium transition-all ${mobileExpanded && mobileTab === "vision" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"
+              }`}
           >
             <Scan className="h-3 w-3 text-[#f95721]" />
             <span className="font-mono font-bold">{s.detected}</span>
@@ -560,9 +734,8 @@ export default function ModernTrafficDashboard() {
               setMobileTab("espera");
               setMobileExpanded((e) => (mobileTab === "espera" ? !e : true));
             }}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium transition-all ${
-              mobileExpanded && mobileTab === "espera" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"
-            }`}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium transition-all ${mobileExpanded && mobileTab === "espera" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"
+              }`}
           >
             <Activity className="h-3 w-3 text-emerald-500" />
             <span className="font-mono font-bold">{totalWaiting}</span>
@@ -577,9 +750,8 @@ export default function ModernTrafficDashboard() {
               setMobileTab("flujo");
               setMobileExpanded((e) => (mobileTab === "flujo" ? !e : true));
             }}
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium transition-all ${
-              mobileExpanded && mobileTab === "flujo" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"
-            }`}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-medium transition-all ${mobileExpanded && mobileTab === "flujo" ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"
+              }`}
           >
             <Leaf className="h-3 w-3 text-[#f95721]" />
             <span className="font-mono font-bold">{flowPercent}%</span>
@@ -596,27 +768,27 @@ export default function ModernTrafficDashboard() {
         </div>
       </div>
 
-      {/* ── Switch YOLO26n (Responsive positioning) ── */}
-      <div className="fixed bottom-16 right-3 md:bottom-6 md:right-6 z-20 pointer-events-auto">
-        <button
-          onClick={() => setShowDetections((prev) => !prev)}
-          className="flex items-center gap-2 sm:gap-3 bg-white/95 hover:bg-white backdrop-blur-md border border-black/10 shadow-lg rounded-full px-3 py-1.5 sm:px-4 sm:py-2 text-zinc-800 transition-all hover:shadow-xl active:scale-95"
-        >
-          <Scan className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#f95721]" />
-          <span className="text-[11px] sm:text-xs font-semibold tracking-tight">Recuadros YOLO26n</span>
-          <div
-            className={`w-8 h-4.5 sm:w-9 sm:h-5 rounded-full transition-colors p-0.5 flex items-center ${
-              showDetections ? "bg-[#38bdf8]" : "bg-zinc-300"
-            }`}
+      {/* ── Switch YOLO26n (Solo en modo 3D) ── */}
+      {viewMode !== "camera" && (
+        <div className="fixed bottom-16 right-3 md:bottom-6 md:right-6 z-20 pointer-events-auto">
+          <button
+            onClick={() => setShowDetections((prev) => !prev)}
+            className="flex items-center gap-2 sm:gap-3 bg-white/95 hover:bg-white backdrop-blur-md border border-black/10 shadow-lg rounded-full px-3 py-1.5 sm:px-4 sm:py-2 text-zinc-800 transition-all hover:shadow-xl active:scale-95"
           >
+            <Scan className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#f95721]" />
+            <span className="text-[11px] sm:text-xs font-semibold tracking-tight">Recuadros YOLO26n</span>
             <div
-              className={`bg-white w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full shadow-md transform transition-transform ${
-                showDetections ? "translate-x-3.5 sm:translate-x-4" : "translate-x-0"
-              }`}
-            />
-          </div>
-        </button>
-      </div>
+              className={`w-8 h-4.5 sm:w-9 sm:h-5 rounded-full transition-colors p-0.5 flex items-center ${showDetections ? "bg-[#38bdf8]" : "bg-zinc-300"
+                }`}
+            >
+              <div
+                className={`bg-white w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full shadow-md transform transition-transform ${showDetections ? "translate-x-3.5 sm:translate-x-4" : "translate-x-0"
+                  }`}
+              />
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* ── Drawer: Capas y Opciones ── */}
       {showLayerDrawer && (
@@ -639,9 +811,8 @@ export default function ModernTrafficDashboard() {
               <span className="text-xs font-medium text-zinc-700">Detecciones YOLO</span>
               <button
                 onClick={() => setShowDetections((v) => !v)}
-                className={`text-xs px-2.5 py-1 rounded-full font-semibold transition-colors ${
-                  showDetections ? "bg-[#f95721] text-white" : "bg-zinc-100 text-zinc-600"
-                }`}
+                className={`text-xs px-2.5 py-1 rounded-full font-semibold transition-colors ${showDetections ? "bg-[#f95721] text-white" : "bg-zinc-100 text-zinc-600"
+                  }`}
               >
                 {showDetections ? "Activado" : "Desactivado"}
               </button>
@@ -663,9 +834,8 @@ export default function ModernTrafficDashboard() {
               <span className="text-xs font-medium text-zinc-700">Simulación</span>
               <button
                 onClick={() => setIsPaused((p) => !p)}
-                className={`text-xs px-2.5 py-1 rounded-full font-semibold transition-colors ${
-                  isPaused ? "bg-amber-500 text-white" : "bg-emerald-500 text-white"
-                }`}
+                className={`text-xs px-2.5 py-1 rounded-full font-semibold transition-colors ${isPaused ? "bg-amber-500 text-white" : "bg-emerald-500 text-white"
+                  }`}
               >
                 {isPaused ? "Pausada" : "En curso"}
               </button>
