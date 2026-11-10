@@ -116,16 +116,24 @@ export default function ModernTrafficDashboard() {
 
   return (
     <div
-      className={`relative min-h-screen w-full overflow-hidden select-none transition-colors duration-500 ${
-        viewMode === "camera" || dayMode === "night"
+      className={`relative min-h-screen w-full overflow-hidden select-none transition-colors duration-500 ${viewMode === "camera" || dayMode === "night"
           ? "bg-[#0d1511]"
-          : dayMode === "sunset"
-          ? "bg-[#c4b0ae]"
-          : "bg-[#dfe6e1]"
-      }`}
+          : viewMode === "neza"
+            ? "bg-[#c4b0ae]"
+            : dayMode === "sunset"
+              ? "bg-[#c4b0ae]"
+              : "bg-[#dfe6e1]"
+        }`}
     >
-      {/* ── Capa de Fondo: Escena 3D Three.js o Cámara YOLO ── */}
-      {viewMode !== "camera" ? (
+      {/* ── Capa de Fondo: Escena 3D Three.js, Cámara YOLO o Glorieta del Coyote ── */}
+      {viewMode === "neza" ? (
+        <iframe
+          src="/glorieta-del-coyote.html"
+          className="fixed inset-0 w-full h-full border-0 z-0"
+          title="Glorieta del Coyote — Neza"
+          sandbox="allow-scripts allow-same-origin"
+        />
+      ) : viewMode !== "camera" ? (
         <TrafficScene
           dashboard={true}
           detections={showDetections}
@@ -160,11 +168,10 @@ export default function ModernTrafficDashboard() {
 
       {/* ── Tarjetas Flotantes en Escritorio (Desktop HUD Izquierda) ── */}
       <div
-        className={`hidden md:flex fixed top-24 left-6 lg:left-8 z-20 flex-col gap-3 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${
-          viewMode === "camera"
+        className={`hidden md:flex fixed top-24 left-6 lg:left-8 z-20 flex-col gap-3 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${viewMode === "camera" || viewMode === "neza"
             ? "opacity-0 pointer-events-none -translate-x-4"
             : "opacity-100 translate-x-0"
-        }`}
+          }`}
       >
         <TarjetaVision s={s} />
         <TarjetaEspera s={s} totalEsperando={totalWaiting} />
@@ -172,11 +179,10 @@ export default function ModernTrafficDashboard() {
 
       {/* ── Tarjeta Flotante en Escritorio (Desktop HUD Derecha: Flujo) ── */}
       <div
-        className={`hidden md:block fixed top-24 right-6 lg:right-8 z-20 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${
-          viewMode === "camera"
+        className={`hidden md:block fixed top-24 right-6 lg:right-8 z-20 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${viewMode === "camera" || viewMode === "neza"
             ? "opacity-0 pointer-events-none translate-x-4"
             : "opacity-100 translate-x-0"
-        }`}
+          }`}
       >
         <TarjetaFlujo s={s} porcentajeFlujo={flowPercent} />
       </div>
@@ -186,6 +192,9 @@ export default function ModernTrafficDashboard() {
         s={s}
         totalEsperando={totalWaiting}
         porcentajeFlujo={flowPercent}
+        modoVista={viewMode}
+        modoDia={dayMode}
+        alCambiarModoDia={setDayMode}
         pestanaMovil={mobileTab}
         alCambiarPestana={setMobileTab}
         expandido={mobileExpanded}

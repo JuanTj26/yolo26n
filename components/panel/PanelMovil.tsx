@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { Scan, Activity, Leaf, ChevronDown, ChevronUp } from "lucide-react";
-import type { EstadoTrafico, ModoVista } from "./tipos";
+import { Scan, Activity, Leaf, ChevronDown, ChevronUp, Sun, Sunset, Moon } from "lucide-react";
+import type { EstadoTrafico, ModoVista, ModoDia } from "./tipos";
 
 export interface PanelMovilProps {
   estado?: EstadoTrafico;
@@ -11,6 +11,8 @@ export interface PanelMovilProps {
   totalEsperando?: number;
   porcentajeFlujo: number;
   modoVista?: ModoVista;
+  modoDia?: ModoDia;
+  alCambiarModoDia?: (modo: ModoDia) => void;
   expandido: boolean;
   alCambiarExpandido?: (expandido: boolean | ((prev: boolean) => boolean)) => void;
   alAlternarExpansion?: () => void;
@@ -26,6 +28,8 @@ export function PanelMovil({
   totalEsperando,
   porcentajeFlujo,
   modoVista = "perspective",
+  modoDia = "day",
+  alCambiarModoDia,
   expandido,
   alCambiarExpandido,
   alAlternarExpansion,
@@ -406,6 +410,44 @@ export function PanelMovil({
                   />
                 </div>
                 <div className="mt-2 text-[10px] text-zinc-400">Vehículos en movimiento fluido</div>
+              </div>
+            )}
+            {/* Selector de iluminación (Día / Atardecer / Noche) — solo en móvil cuando no es modo cámara */}
+            {modoVista !== "camera" && alCambiarModoDia && (
+              <div className="mt-3 pt-3 border-t border-zinc-100 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => alCambiarModoDia("day")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    modoDia === "day"
+                      ? "bg-amber-500 text-white shadow-sm"
+                      : "text-zinc-600 bg-zinc-100 hover:bg-zinc-200"
+                  }`}
+                >
+                  <Sun className="h-3.5 w-3.5" />
+                  Día
+                </button>
+                <button
+                  onClick={() => alCambiarModoDia("sunset")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    modoDia === "sunset"
+                      ? "bg-gradient-to-r from-[#f95721] to-[#ea580c] text-white shadow-sm"
+                      : "text-zinc-600 bg-zinc-100 hover:bg-zinc-200"
+                  }`}
+                >
+                  <Sunset className="h-3.5 w-3.5" />
+                  Atardecer
+                </button>
+                <button
+                  onClick={() => alCambiarModoDia("night")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    modoDia === "night"
+                      ? "bg-[#0b1329] text-cyan-300 shadow-sm ring-1 ring-cyan-500/40"
+                      : "text-zinc-600 bg-zinc-100 hover:bg-zinc-200"
+                  }`}
+                >
+                  <Moon className="h-3.5 w-3.5" />
+                  Noche
+                </button>
               </div>
             )}
           </div>

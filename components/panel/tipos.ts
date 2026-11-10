@@ -12,6 +12,6 @@ export type EstadoTrafico = {
   pedestrianGreen: boolean;
 };
 
-export type ModoVista = "perspective" | "overhead" | "camera";
+export type ModoVista = "perspective" | "overhead" | "camera" | "neza";
 export type ModoDia = "day" | "sunset" | "night";
 

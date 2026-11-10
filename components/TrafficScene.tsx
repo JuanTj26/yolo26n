@@ -48,7 +48,7 @@ export default function TrafficScene({
         shadows="percentage"
         flat
         dpr={[1, 1.5]}
-        camera={{ fov: 32, near: 1, far: 240, position: CUADROS_CLAVE[0]!.pos }}
+        camera={{ fov: 32, near: 1, far: 320, position: CUADROS_CLAVE[0]!.pos }}
         gl={{ antialias: true, powerPreference: "high-performance" }}
         onCreated={({ gl }) => {
           gl.shadowMap.enabled = true;

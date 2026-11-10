@@ -84,6 +84,16 @@ export function BarraSuperior({
           Vista aérea
         </button>
         <button
+          onClick={() => alCambiarModoVista(modoVista === "neza" ? "perspective" : "neza")}
+          className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all active:scale-95 ${modoVista === "neza"
+            ? "bg-[#c4501f] text-white shadow-sm ring-2 ring-[#c4501f]/30"
+            : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          title="Glorieta del Coyote — Neza"
+        >
+          Neza
+        </button>
+        <button
           onClick={() => alCambiarModoVista(modoVista === "camera" ? "perspective" : "camera")}
           className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 ${modoVista === "camera"
             ? "bg-[#f95721] text-white shadow-sm ring-2 ring-[#f95721]/30"

@@ -11,7 +11,7 @@ export default function AmbienteEscena({ modo }: { modo: DayMode }) {
       {modo === "day" && (
         <>
           <color attach="background" args={["#dfe6e1"]} />
-          <fog attach="fog" args={["#dfe6e1", 70, 240]} />
+          <fog attach="fog" args={["#dfe6e1", 95, 360]} />
           <hemisphereLight args={["#ffffff", "#8a8a80", 1.0]} />
           <directionalLight
             position={[70, 100, 45]}
@@ -35,7 +35,7 @@ export default function AmbienteEscena({ modo }: { modo: DayMode }) {
       {modo === "sunset" && (
         <>
           <color attach="background" args={["#c4b0ae"]} />
-          <fog attach="fog" args={["#c4b0ae", 60, 220]} />
+          <fog attach="fog" args={["#c4b0ae", 90, 340]} />
           <hemisphereLight args={["#ffd3b0", "#5a4038", 0.9]} />
           <directionalLight
             position={[60, 45, 30]}
@@ -59,7 +59,7 @@ export default function AmbienteEscena({ modo }: { modo: DayMode }) {
       {modo === "night" && (
         <>
           <color attach="background" args={["#0d1511"]} />
-          <fog attach="fog" args={["#0d1511", 50, 200]} />
+          <fog attach="fog" args={["#0d1511", 90, 340]} />
           <hemisphereLight args={["#304050", "#0a100d", 0.45]} />
           <directionalLight
             position={[40, 70, 30]}

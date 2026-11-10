@@ -34,19 +34,26 @@ export default function CamaraOrbital({
 
   useFrame(({ clock }, delta) => {
     const ct = clock.elapsedTime;
+    const esMovil = size.width < size.height;
+
+    // En pantallas verticales (móviles/celulares), alejamos la cámara agresivamente
+    // para que el cruce completo, semáforos y autos quepan holgadamente en pantalla
+    const factorEscalaMovil = esMovil
+      ? Math.max(2.2, Math.min(2.8, (size.height / size.width) * 1.3))
+      : 1.0;
 
     if (giroAutomatico && dashboard) {
       if (vistaAerea) {
-        // Órbita cenital suave (estilo vista desde arriba de la referencia)
-        const radio = 14;
-        const altura = 72;
+        // Órbita cenital: más alta y abierta en teléfonos
+        const radio = 14 * (esMovil ? 1.4 : 1.0);
+        const altura = 72 * (esMovil ? 1.6 : 1.0);
         const angulo = ct * 0.12;
         tp.set(Math.sin(angulo) * radio, altura, Math.cos(angulo) * radio);
         tl.set(0, 0, 0);
       } else {
-        // Giro orbital continuo panorámico 360° (estilo Glorieta del Coyote)
-        const radio = 42;
-        const altura = 26;
+        // Giro orbital continuo 360°: radio y altura escalados según pantalla
+        const radio = 42 * factorEscalaMovil;
+        const altura = 26 * factorEscalaMovil;
         const angulo = ct * 0.15;
         tp.set(Math.sin(angulo) * radio, altura, Math.cos(angulo) * radio);
         tl.set(0, 0.8, 0);
@@ -66,8 +73,10 @@ export default function CamaraOrbital({
       t = t * t * (3 - 2 * t);
       tp.set(...a.pos).lerp(new THREE.Vector3(...b.pos), t);
       tl.set(...a.look).lerp(new THREE.Vector3(...b.look), t);
-      const estrecho = size.width < size.height;
-      if (estrecho) tp.sub(tl).multiplyScalar(1.55).add(tl);
+
+      if (esMovil) {
+        tp.sub(tl).multiplyScalar(factorEscalaMovil).add(tl);
+      }
       tp.x += Math.sin(ct * 0.12) * 1.2 + story.mouse.x * 2.2;
       tp.y += story.mouse.y * -1.2;
       tp.z += Math.cos(ct * 0.1) * 1.2;
