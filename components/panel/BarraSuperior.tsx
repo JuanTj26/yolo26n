@@ -63,11 +63,11 @@ export function BarraSuperior({
         </Link>
       </div>
 
-      {/* Píldora de navegación central (Inicio / Vista aérea / Cámara) */}
-      <div className="pointer-events-auto bg-white/85 hover:bg-white backdrop-blur-xl border border-black/5 shadow-sm rounded-full p-1 flex items-center gap-1 transition-all">
+      {/* Píldora de navegación central (Inicio / Vista aérea / Cámara / Maqueta) */}
+      <div className="pointer-events-auto bg-white/85 hover:bg-white backdrop-blur-xl border border-black/5 shadow-sm rounded-full p-1 flex items-center gap-1 transition-all max-w-[calc(100vw-85px)] sm:max-w-none overflow-x-auto no-scrollbar flex-shrink">
         <button
           onClick={() => alCambiarModoVista("perspective")}
-          className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all ${modoVista === "perspective"
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${modoVista === "perspective"
             ? "bg-[#18181b] text-white shadow-sm"
             : "text-zinc-600 hover:text-zinc-900"
             }`}
@@ -76,16 +76,16 @@ export function BarraSuperior({
         </button>
         <button
           onClick={() => alCambiarModoVista("overhead")}
-          className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all ${modoVista === "overhead"
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${modoVista === "overhead"
             ? "bg-[#18181b] text-white shadow-sm"
             : "text-zinc-600 hover:text-zinc-900"
             }`}
         >
-          Vista aérea
+          <span className="hidden sm:inline">Vista </span>Aérea
         </button>
         <button
           onClick={() => alCambiarModoVista(modoVista === "neza" ? "perspective" : "neza")}
-          className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all active:scale-95 ${modoVista === "neza"
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 active:scale-95 ${modoVista === "neza"
             ? "bg-[#c4501f] text-white shadow-sm ring-2 ring-[#c4501f]/30"
             : "text-zinc-600 hover:text-zinc-900"
             }`}
@@ -95,7 +95,7 @@ export function BarraSuperior({
         </button>
         <button
           onClick={() => alCambiarModoVista(modoVista === "camera" ? "perspective" : "camera")}
-          className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 ${modoVista === "camera"
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 flex items-center gap-1 active:scale-95 ${modoVista === "camera"
             ? "bg-[#f95721] text-white shadow-sm ring-2 ring-[#f95721]/30"
             : "text-zinc-600 hover:text-zinc-900"
             }`}
@@ -106,14 +106,14 @@ export function BarraSuperior({
         </button>
         <button
           onClick={() => alCambiarModoVista(modoVista === "camera_maqueta" ? "perspective" : "camera_maqueta")}
-          className={`px-3 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 ${modoVista === "camera_maqueta"
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 flex items-center gap-1 active:scale-95 ${modoVista === "camera_maqueta"
             ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30"
             : "text-zinc-600 hover:text-zinc-900"
             }`}
           title="Cámara Maqueta — Modelo best.onnx (YOLO26n 640px)"
         >
-          <Camera className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-400" />
-          <span>Cámara Maqueta</span>
+          <Camera className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-300" />
+          <span><span className="hidden sm:inline">Cámara </span>Maqueta</span>
         </button>
       </div>
 

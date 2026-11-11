@@ -192,7 +192,7 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
 
       {/* ── Bottom Floating Status Pill (Matches /demo stats) ── */}
       {source !== "ninguna" && (
-        <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-30 flex items-center gap-2 bg-black/85 backdrop-blur-md border border-white/15 px-3.5 py-1.5 rounded-full text-white text-xs font-mono shadow-2xl pointer-events-auto">
+        <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-30 flex items-center gap-2 bg-black/85 backdrop-blur-md border border-white/15 px-3 sm:px-3.5 py-1.5 rounded-full text-white text-xs font-mono shadow-2xl pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar">
           {/* Status Dot */}
           <span className="relative flex h-2 w-2">
             {modelStatus === "listo" && (

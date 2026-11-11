@@ -58,9 +58,8 @@ export const MenuCapas: React.FC<MenuCapasProps> = ({
           <span className="text-xs text-zinc-600 font-medium">Recuadros</span>
           <button
             onClick={alAlternarRecuadros}
-            className={`text-[11px] px-2.5 py-1 rounded-full font-semibold transition-all ${
-              mostrarRecuadros ? "bg-[#f95721] text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-            }`}
+            className={`text-[11px] px-2.5 py-1 rounded-full font-semibold transition-all ${mostrarRecuadros ? "bg-[#f95721] text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+              }`}
           >
             {mostrarRecuadros ? "Activado" : "Desactivado"}
           </button>
@@ -84,9 +83,8 @@ export const MenuCapas: React.FC<MenuCapasProps> = ({
           <span className="text-xs text-zinc-600 font-medium">Giro continuo 360°</span>
           <button
             onClick={() => alCambiarGiroAutomatico(!giroAutomatico)}
-            className={`text-[11px] px-2.5 py-1 rounded-full font-semibold transition-all ${
-              giroAutomatico ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-            }`}
+            className={`text-[11px] px-2.5 py-1 rounded-full font-semibold transition-all ${giroAutomatico ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+              }`}
           >
             {giroAutomatico ? "ON" : "OFF"}
           </button>
@@ -97,24 +95,36 @@ export const MenuCapas: React.FC<MenuCapasProps> = ({
           <span className="text-xs text-zinc-600 font-medium">Simulación</span>
           <button
             onClick={alAlternarPausa}
-            className={`text-[11px] px-2.5 py-1 rounded-full font-semibold transition-colors ${
-              estaPausado ? "bg-amber-500 text-white" : "bg-emerald-500 text-white"
-            }`}
+            className={`text-[11px] px-2.5 py-1 rounded-full font-semibold transition-colors ${estaPausado ? "bg-amber-500 text-white" : "bg-emerald-500 text-white"
+              }`}
           >
             {estaPausado ? "Pausa" : "Activa"}
           </button>
         </div>
       </div>
 
-      {/* Enlace inferior limpio a demo de cámara */}
-      <div className="mt-4 pt-2.5 border-t border-zinc-100">
-        <Link
-          href="/demo"
+      {/* Accesos directos a cámaras */}
+      <div className="mt-4 pt-2.5 border-t border-zinc-100 flex flex-col gap-1.5">
+        <button
+          onClick={() => {
+            alCambiarModoVista("camera_maqueta");
+            alCerrar();
+          }}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors"
+        >
+          <Scan className="h-3 w-3" />
+          <span>Cámara Maqueta (best.onnx)</span>
+        </button>
+        <button
+          onClick={() => {
+            alCambiarModoVista("camera");
+            alCerrar();
+          }}
           className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-semibold transition-colors"
         >
           <Scan className="h-3 w-3" />
-          <span>Ver cámara en vivo</span>
-        </Link>
+          <span>Cámara Dual (Carritos + Personas)</span>
+        </button>
       </div>
     </div>
   );

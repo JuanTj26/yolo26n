@@ -153,12 +153,7 @@ export function PanelMovil({
                           : "bg-emerald-500 shadow-[0_0_6px_#10b981]"
                         : "bg-red-500";
 
-                    // En modo cámara no mostramos este panel porque la cámara tiene su propio HUD flotante
-  if (modoVista === "camera" || modoVista === "camera_maqueta") {
-    return null;
-  }
-
-  return (
+                    return (
                       <div key={idx} className="bg-white/10 rounded-xl p-2.5 text-center">
                         <div className="flex items-center justify-center gap-1 mb-1">
                           <span className={`h-2 w-2 rounded-full ${lightCls}`} />
@@ -348,12 +343,7 @@ export function PanelMovil({
                           : "bg-emerald-500 shadow-[0_0_6px_#10b981]"
                         : "bg-red-500";
 
-                    // En modo cámara no mostramos este panel porque la cámara tiene su propio HUD flotante
-  if (modoVista === "camera" || modoVista === "camera_maqueta") {
-    return null;
-  }
-
-  return (
+                    return (
                       <div
                         key={idx}
                         className="bg-zinc-50 rounded-lg p-1.5 border border-black/5 flex items-center justify-between"
@@ -423,8 +413,8 @@ export function PanelMovil({
                 <div className="mt-2 text-[10px] text-zinc-400">Vehículos en movimiento fluido</div>
               </div>
             )}
-            {/* Selector de iluminación (Día / Atardecer / Noche) — solo en móvil cuando no es modo cámara */}
-            {modoVista !== "camera" && alCambiarModoDia && (
+            {/* Selector de iluminación (Día / Atardecer / Noche) — solo en móvil */}
+            {alCambiarModoDia && (
               <div className="mt-3 pt-3 border-t border-zinc-100 flex items-center justify-center gap-2">
                 <button
                   onClick={() => alCambiarModoDia("day")}
