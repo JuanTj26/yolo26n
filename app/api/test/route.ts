@@ -16,6 +16,12 @@ export async function GET() {
     const [rows] = await conn.execute("SELECT NOW() AS ahora");
     return NextResponse.json({ ok: true, resultado: rows });
   } catch (err: unknown) {
+    console.log("DEBUG", {
+      userLen: process.env.DB_USER?.length,
+      userEnd: JSON.stringify(process.env.DB_USER?.slice(-6)),
+      passLen: process.env.DB_PASSWORD?.length,
+      hostOk: process.env.DB_HOST === "gateway01.us-east-1.prod.aws.tidbcloud.com",
+    });
     const mensaje = err instanceof Error ? err.message : "Error desconocido";
     return NextResponse.json({ ok: false, error: mensaje }, { status: 500 });
   } finally {

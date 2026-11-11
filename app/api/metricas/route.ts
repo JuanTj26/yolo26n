@@ -42,6 +42,12 @@ export async function GET() {
     );
     return NextResponse.json({ ok: true, datos: filas });
   } catch (err: unknown) {
+    console.log("DEBUG", {
+      userLen: process.env.DB_USER?.length,
+      userEnd: JSON.stringify(process.env.DB_USER?.slice(-6)),
+      passLen: process.env.DB_PASSWORD?.length,
+      hostOk: process.env.DB_HOST === "gateway01.us-east-1.prod.aws.tidbcloud.com",
+    });
     const mensaje = err instanceof Error ? err.message : "Error al consultar TiDB";
     return NextResponse.json({ ok: false, error: mensaje }, { status: 500 });
   } finally {
@@ -84,6 +90,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, resultado });
   } catch (err: unknown) {
+    console.log("DEBUG", {
+      userLen: process.env.DB_USER?.length,
+      userEnd: JSON.stringify(process.env.DB_USER?.slice(-6)),
+      passLen: process.env.DB_PASSWORD?.length,
+      hostOk: process.env.DB_HOST === "gateway01.us-east-1.prod.aws.tidbcloud.com",
+    });
     const mensaje = err instanceof Error ? err.message : "Error al guardar en TiDB";
     return NextResponse.json({ ok: false, error: mensaje }, { status: 500 });
   } finally {
