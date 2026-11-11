@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { COCO_CLASSES, YoloDetector, type Detection } from "@/lib/yolo";
+import { COCO_CLASSES, YoloDetector, DualYoloDetector, type Detection } from "@/lib/yolo";
 import { TrafficController, type LightState } from "@/lib/trafficController";
 import type { Zone } from "@/lib/types";
 
@@ -21,7 +21,7 @@ const ZONE_COLORS = [
 interface Props {
   videoRef:    React.RefObject<HTMLVideoElement>;
   canvasRef:   React.RefObject<HTMLCanvasElement>;
-  detectorRef: React.RefObject<YoloDetector | null>;
+  detectorRef: React.RefObject<YoloDetector | DualYoloDetector | null>;
   zonesRef:    React.MutableRefObject<Zone[]>;
   draftRef:    React.MutableRefObject<Zone | null>;
   onError:     (msg: string) => void;
@@ -60,7 +60,7 @@ export function useInferenceLoop({
     let fpsAvg   = 0;
     let lastUIUpdate = 0;
 
-    const runInference = (video: HTMLVideoElement, det: YoloDetector) => {
+    const runInference = (video: HTMLVideoElement, det: YoloDetector | DualYoloDetector) => {
       busy = true;
       const tStart = performance.now();
       det.detect(video)
@@ -73,6 +73,10 @@ export function useInferenceLoop({
           const zs = zonesRef.current ?? [];
           const c  = zs.map(() => 0);
           for (const d of dets) {
+            // Contamos como vehículos para las zonas: toy-car o clases vehiculares de COCO
+            const isVehicle = d.isToyCar || d.label === "toy-car" || (d.classId !== 0);
+            if (!isVehicle) continue;
+
             const cx = (d.x1 + d.x2) / 2 / vw;
             const cy = (d.y1 + d.y2) / 2 / vh;
             zs.forEach((z, i) => {
@@ -88,7 +92,7 @@ export function useInferenceLoop({
           if (dt > 0 && dt < 2000)
             fpsAvg = fpsAvg === 0 ? 1000 / dt : fpsAvg * 0.8 + (1000 / dt) * 0.2;
 
-          if (now - lastUIUpdate > 200) {
+          if (now - lastUIUpdate > 180) {
             lastUIUpdate = now;
             onUpdate(det.backend);
             setCounts(c);
@@ -99,9 +103,7 @@ export function useInferenceLoop({
           }
         })
         .catch((e) => {
-          console.error(e);
-          disabled = true;
-          onError("Falló la inferencia: " + (e instanceof Error ? e.message : String(e)));
+          console.warn("[InferenceLoop] Error en frame:", e);
         })
         .finally(() => { busy = false; });
     };
@@ -173,22 +175,35 @@ export function useInferenceLoop({
       // Bounding boxes
       ctx.lineWidth = 2 * u;
       for (const d of detsRef.current) {
-        const labelName = COCO_CLASSES[d.classId] ?? `Objeto ${d.classId}`;
-        ctx.strokeStyle = "#22d3ee";
-        ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
+        const isToyCar = d.isToyCar || d.label === "toy-car";
+        const isPerson = d.classId === 0 && !isToyCar;
+        const labelName = d.label || (COCO_CLASSES[d.classId] ?? `Objeto ${d.classId}`);
+        const boxColor = d.color || (isToyCar ? "#f95721" : isPerson ? "#10b981" : "#22d3ee");
+
+        const x1 = Math.max(0, d.x1);
+        const y1 = Math.max(0, d.y1);
+        const x2 = Math.min(W, d.x2);
+        const y2 = Math.min(H, d.y2);
+        const bw = Math.max(0, x2 - x1);
+        const bh = Math.max(0, y2 - y1);
+
+        ctx.strokeStyle = boxColor;
+        ctx.strokeRect(x1, y1, bw, bh);
 
         const label = `${labelName} ${Math.round(d.score * 100)}%`;
         const tw = ctx.measureText(label).width + 10 * u;
         const th = 20 * u;
-        const ty = Math.max(0, d.y1 - th);
-        ctx.fillStyle = "#0891b2";
-        ctx.fillRect(d.x1, ty, tw, th);
+        const ty = Math.max(0, y1 - th);
+        const labelX = Math.max(0, Math.min(x1, W - tw));
+
+        ctx.fillStyle = boxColor;
+        ctx.fillRect(labelX, ty, tw, th);
         ctx.fillStyle = "#ffffff";
-        ctx.fillText(label, d.x1 + 5 * u, ty + 3 * u);
+        ctx.fillText(label, labelX + 5 * u, ty + 3 * u);
       }
     };
 
-    // Inferencia: setInterval para no bloquear el hilo principal
+    // Inferencia: bucle rápido no bloqueante
     const inferInterval = setInterval(() => {
       const video  = videoRef.current;
       const canvas = canvasRef.current;
@@ -208,7 +223,7 @@ export function useInferenceLoop({
       if (det && !busy && !disabled) runInference(video, det);
     }, 0);
 
-    // Dibujo: RAF independiente
+    // Dibujo continuo a 60 FPS
     let drawRaf = 0;
     const drawLoop = () => {
       drawRaf = requestAnimationFrame(drawLoop);

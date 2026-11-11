@@ -1,38 +1,61 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { YoloDetector } from "@/lib/yolo";
+import { YoloDetector, DualYoloDetector } from "@/lib/yolo";
 import type { ModelStatus } from "@/lib/types";
 
-const MODEL_URL = "/models/yolo26n_webgpu.onnx";
+export type DetectorMode = "dual" | "maqueta" | "general";
 
-export function useYoloDetector() {
-  const detectorRef = useRef<YoloDetector | null>(null);
+export function useYoloDetector(initialMode: DetectorMode = "dual") {
+  const detectorRef = useRef<YoloDetector | DualYoloDetector | null>(null);
+  const [modelMode, setModelMode] = useState<DetectorMode>(initialMode);
   const [modelStatus, setModelStatus] = useState<ModelStatus>("cargando");
   const [backend, setBackend] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     setModelStatus("cargando");
+    detectorRef.current?.dispose();
+    detectorRef.current = null;
 
-    YoloDetector.create(MODEL_URL)
-      .then((d) => {
-        if (cancelled) { d.dispose(); return; }
-        detectorRef.current = d;
-        setBackend(d.backend);
+    const load = async () => {
+      try {
+        let detector: YoloDetector | DualYoloDetector;
+        if (modelMode === "dual") {
+          detector = await DualYoloDetector.createDual(
+            "/models/yolo26n_webgpu.onnx",
+            "/models/best.onnx"
+          );
+        } else if (modelMode === "maqueta") {
+          detector = await DualYoloDetector.createBestOnly("/models/best.onnx");
+        } else {
+          detector = await YoloDetector.create("/models/yolo26n_webgpu.onnx", {
+            inputSize: 320,
+          });
+        }
+
+        if (cancelled) {
+          detector.dispose();
+          return;
+        }
+
+        detectorRef.current = detector;
+        setBackend(detector.backend);
         setModelStatus("listo");
-      })
-      .catch((e) => {
+      } catch (err) {
         if (!cancelled) setModelStatus("error");
-        console.error("[YOLO26n] Error al cargar el modelo:", e);
-      });
+        console.error("[useYoloDetector] Error cargando modelo:", err);
+      }
+    };
+
+    load();
 
     return () => {
       cancelled = true;
       detectorRef.current?.dispose();
       detectorRef.current = null;
     };
-  }, []);
+  }, [modelMode]);
 
-  return { detectorRef, modelStatus, backend, setBackend };
+  return { detectorRef, modelStatus, backend, setBackend, modelMode, setModelMode };
 }

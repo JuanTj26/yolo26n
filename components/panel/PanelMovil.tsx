@@ -71,9 +71,9 @@ export function PanelMovil({
 
   return (
     <>
-      {/* ── MODO CÁMARA ESCRITORIO (Panel inferior flotante) ── */}
-      {modoVista === "camera" && (
-        <div className="hidden md:block fixed bottom-6 inset-x-6 z-30 pointer-events-auto">
+      {/* ── MODO CÁMARA ESCRITORIO (Alineado a la IZQUIERDA para no estorbar el selector de cámara) ── */}
+      {(modoVista === "camera" || modoVista === "camera_maqueta") && (
+        <div className="hidden md:block fixed bottom-4 sm:bottom-6 left-4 sm:left-6 z-30 pointer-events-auto max-w-fit">
           {expandido && (
             <div className="mb-3 bg-black/80 backdrop-blur-xl border border-white/15 rounded-2xl p-4 shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200 text-white">
               <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-3">
@@ -153,7 +153,12 @@ export function PanelMovil({
                           : "bg-emerald-500 shadow-[0_0_6px_#10b981]"
                         : "bg-red-500";
 
-                    return (
+                    // En modo cámara no mostramos este panel porque la cámara tiene su propio HUD flotante
+  if (modoVista === "camera" || modoVista === "camera_maqueta") {
+    return null;
+  }
+
+  return (
                       <div key={idx} className="bg-white/10 rounded-xl p-2.5 text-center">
                         <div className="flex items-center justify-center gap-1 mb-1">
                           <span className={`h-2 w-2 rounded-full ${lightCls}`} />
@@ -249,8 +254,9 @@ export function PanelMovil({
         </div>
       )}
 
-      {/* ── VISTA MÓVIL (Pantallas < md) ── */}
-      <div className="md:hidden fixed bottom-3 inset-x-3 z-30 pointer-events-auto">
+      {/* ── VISTA MÓVIL (Pantallas < md, solo modo 3D) ── */}
+      {modoVista !== "camera" && modoVista !== "camera_maqueta" && (
+        <div className="md:hidden fixed bottom-3 inset-x-3 z-30 pointer-events-auto">
         {expandido && (
           <div className="mb-2 bg-white/95 backdrop-blur-xl border border-black/10 rounded-2xl p-4 shadow-2xl animate-in slide-in-from-bottom-3 duration-200">
             <div className="flex items-center justify-between pb-2 border-b border-zinc-100">
@@ -342,7 +348,12 @@ export function PanelMovil({
                           : "bg-emerald-500 shadow-[0_0_6px_#10b981]"
                         : "bg-red-500";
 
-                    return (
+                    // En modo cámara no mostramos este panel porque la cámara tiene su propio HUD flotante
+  if (modoVista === "camera" || modoVista === "camera_maqueta") {
+    return null;
+  }
+
+  return (
                       <div
                         key={idx}
                         className="bg-zinc-50 rounded-lg p-1.5 border border-black/5 flex items-center justify-between"
@@ -511,6 +522,7 @@ export function PanelMovil({
           </button>
         </div>
       </div>
+      )}
     </>
   );
 }

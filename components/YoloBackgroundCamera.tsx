@@ -9,12 +9,13 @@ import { Camera, Upload, Trash2, Video, RotateCw } from "lucide-react";
 
 interface Props {
   onDetections?: (count: number) => void;
+  initialModelMode?: "dual" | "maqueta" | "general";
 }
 
 const MAX_ZONES = 4;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
-export default function YoloBackgroundCamera({ onDetections }: Props) {
+export default function YoloBackgroundCamera({ onDetections, initialModelMode = "dual" }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const zonesRef = useRef<Zone[]>([]);
@@ -25,8 +26,16 @@ export default function YoloBackgroundCamera({ onDetections }: Props) {
   const [, setAspect] = useState(16 / 9);
   const [zones, setZones] = useState<Zone[]>([]);
 
-  // 1. Exact detector hook from /demo
-  const { detectorRef, modelStatus, backend, setBackend } = useYoloDetector();
+  // 1. Exact detector hook with dynamic mode support
+  const { detectorRef, modelStatus, backend, setBackend, modelMode, setModelMode } =
+    useYoloDetector(initialModelMode);
+
+  // Sync initialModelMode when parent viewMode changes
+  useEffect(() => {
+    if (initialModelMode) {
+      setModelMode(initialModelMode);
+    }
+  }, [initialModelMode, setModelMode]);
 
   // 2. Exact video source hook from /demo
   const { source, startWebcam, onFile, devices, deviceId, setDeviceId, stopSource, refreshDevices } =
@@ -108,7 +117,7 @@ export default function YoloBackgroundCamera({ onDetections }: Props) {
         muted
         playsInline
         className="absolute inset-0 w-full h-full object-cover z-0"
-        onLoadedMetadata={() => videoRef.current?.play().catch(() => {})}
+        onLoadedMetadata={() => videoRef.current?.play().catch(() => { })}
       />
 
       {/* ── Exact Canvas overlay from /demo with Cyan boxes & Traffic Zones ── */}
@@ -130,6 +139,35 @@ export default function YoloBackgroundCamera({ onDetections }: Props) {
           <p className="text-sm text-zinc-400 max-w-sm mb-6">
             Activa tu cámara web o sube un video para iniciar la detección en tiempo real.
           </p>
+          <div className="flex items-center gap-2 mb-4 bg-zinc-900/90 border border-white/10 px-3 py-2 rounded-xl">
+            <Camera className="h-4 w-4 text-[#f95721] flex-shrink-0" />
+            <select
+              value={deviceId}
+              onChange={(e) => {
+                setDeviceId(e.target.value);
+                localStorage.setItem("preferred_camera_id", e.target.value);
+              }}
+              className="bg-transparent text-zinc-200 text-xs font-sans outline-none cursor-pointer max-w-[220px] truncate"
+            >
+              {devices.length === 0 ? (
+                <option value="" className="bg-zinc-900">Buscando cámaras…</option>
+              ) : (
+                devices.map((d, i) => (
+                  <option key={d.deviceId} value={d.deviceId} className="bg-zinc-900">
+                    {d.label || `Cámara ${i + 1}`}
+                  </option>
+                ))
+              )}
+            </select>
+            <button
+              onClick={() => refreshDevices()}
+              className="p-1 hover:bg-white/10 rounded text-zinc-400 hover:text-white transition-colors"
+              title="Actualizar lista de cámaras (Iriun Webcam, USB)"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
           <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={() => startWebcam(deviceId || undefined)}
@@ -161,15 +199,28 @@ export default function YoloBackgroundCamera({ onDetections }: Props) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
             )}
             <span
-              className={`relative inline-flex rounded-full h-2 w-2 ${
-                modelStatus === "listo" ? "bg-emerald-500" : "bg-amber-400"
-              }`}
+              className={`relative inline-flex rounded-full h-2 w-2 ${modelStatus === "listo" ? "bg-emerald-500" : "bg-amber-400"
+                }`}
             />
           </span>
 
           <span className="font-semibold text-zinc-200">
             {modelStatus === "cargando" ? "Cargando…" : backend || "YOLO26n"}
           </span>
+
+          <span className="text-zinc-600">|</span>
+
+          {/* Selector de Modelo IA */}
+          <select
+            value={modelMode}
+            onChange={(e) => setModelMode(e.target.value as any)}
+            className="bg-zinc-800 border border-white/20 text-[#f95721] font-semibold rounded px-2 py-0.5 text-[11px] font-sans outline-none cursor-pointer"
+            title="Seleccionar modelo de detección"
+          >
+            <option value="maqueta">🏎️ Carritos (best.onnx)</option>
+            <option value="dual">👥 Dual (Carritos + Personas)</option>
+            <option value="general">🌐 General (COCO)</option>
+          </select>
 
           <span className="text-zinc-600">|</span>
 

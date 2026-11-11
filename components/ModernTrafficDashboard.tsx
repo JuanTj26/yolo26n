@@ -114,15 +114,17 @@ export default function ModernTrafficDashboard() {
     Math.min(94, Math.round(58 + s.flow * 3.5 - totalWaiting * 1.2))
   );
 
+  const isCamera = viewMode === "camera" || viewMode === "camera_maqueta";
+
   return (
     <div
-      className={`relative min-h-screen w-full overflow-hidden select-none transition-colors duration-500 ${viewMode === "camera" || dayMode === "night"
-          ? "bg-[#0d1511]"
-          : viewMode === "neza"
+      className={`relative min-h-screen w-full overflow-hidden select-none transition-colors duration-500 ${isCamera || dayMode === "night"
+        ? "bg-[#0d1511]"
+        : viewMode === "neza"
+          ? "bg-[#c4b0ae]"
+          : dayMode === "sunset"
             ? "bg-[#c4b0ae]"
-            : dayMode === "sunset"
-              ? "bg-[#c4b0ae]"
-              : "bg-[#dfe6e1]"
+            : "bg-[#dfe6e1]"
         }`}
     >
       {/* ── Capa de Fondo: Escena 3D Three.js, Cámara YOLO o Glorieta del Coyote ── */}
@@ -133,7 +135,7 @@ export default function ModernTrafficDashboard() {
           title="Glorieta del Coyote — Neza"
           sandbox="allow-scripts allow-same-origin"
         />
-      ) : viewMode !== "camera" ? (
+      ) : !isCamera ? (
         <TrafficScene
           dashboard={true}
           detections={showDetections}
@@ -144,6 +146,7 @@ export default function ModernTrafficDashboard() {
         />
       ) : (
         <YoloBackgroundCamera
+          initialModelMode={viewMode === "camera_maqueta" ? "maqueta" : "dual"}
           onDetections={(count) => {
             setS((prev) => ({
               ...prev,
@@ -168,9 +171,9 @@ export default function ModernTrafficDashboard() {
 
       {/* ── Tarjetas Flotantes en Escritorio (Desktop HUD Izquierda) ── */}
       <div
-        className={`hidden md:flex fixed top-24 left-6 lg:left-8 z-20 flex-col gap-3 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${viewMode === "camera" || viewMode === "neza"
-            ? "opacity-0 pointer-events-none -translate-x-4"
-            : "opacity-100 translate-x-0"
+        className={`hidden md:flex fixed top-24 left-6 lg:left-8 z-20 flex-col gap-3 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${isCamera || viewMode === "neza"
+          ? "opacity-0 pointer-events-none -translate-x-4"
+          : "opacity-100 translate-x-0"
           }`}
       >
         <TarjetaVision s={s} />
@@ -179,31 +182,33 @@ export default function ModernTrafficDashboard() {
 
       {/* ── Tarjeta Flotante en Escritorio (Desktop HUD Derecha: Flujo) ── */}
       <div
-        className={`hidden md:block fixed top-24 right-6 lg:right-8 z-20 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${viewMode === "camera" || viewMode === "neza"
-            ? "opacity-0 pointer-events-none translate-x-4"
-            : "opacity-100 translate-x-0"
+        className={`hidden md:block fixed top-24 right-6 lg:right-8 z-20 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${isCamera || viewMode === "neza"
+          ? "opacity-0 pointer-events-none translate-x-4"
+          : "opacity-100 translate-x-0"
           }`}
       >
         <TarjetaFlujo s={s} porcentajeFlujo={flowPercent} />
       </div>
 
-      {/* ── Panel Móvil (Inferior Desplegable) ── */}
-      <PanelMovil
-        s={s}
-        totalEsperando={totalWaiting}
-        porcentajeFlujo={flowPercent}
-        modoVista={viewMode}
-        modoDia={dayMode}
-        alCambiarModoDia={setDayMode}
-        pestanaMovil={mobileTab}
-        alCambiarPestana={setMobileTab}
-        expandido={mobileExpanded}
-        alAlternarExpansion={() => setMobileExpanded((v) => !v)}
-      />
+      {/* ── Panel Móvil (Inferior Desplegable / Cápsula izquierda) ── */}
+      {viewMode !== "neza" && (
+        <PanelMovil
+          s={s}
+          totalEsperando={totalWaiting}
+          porcentajeFlujo={flowPercent}
+          modoVista={viewMode}
+          modoDia={dayMode}
+          alCambiarModoDia={setDayMode}
+          pestanaMovil={mobileTab}
+          alCambiarPestana={setMobileTab}
+          expandido={mobileExpanded}
+          alAlternarExpansion={() => setMobileExpanded((v) => !v)}
+        />
+      )}
 
       {/* ── Botón Flotante Recuadros (Modo 3D) ── */}
       <BotonRecuadros
-        mostrar={viewMode !== "camera"}
+        mostrar={!isCamera}
         mostrarRecuadros={showDetections}
         alAlternarRecuadros={() => setShowDetections((prev) => !prev)}
       />
