@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Camera, Sun, Sunset, Moon, Pause, Play, Layers } from "lucide-react";
+import { Camera, Sun, Sunset, Moon, Pause, Play, Layers, BarChart3 } from "lucide-react";
 import type { ModoVista, ModoDia } from "./tipos";
+
+// Cambia a `true` el dÃ­a de tu presentaciÃ³n para volver a mostrar Inicio 3D, Vista AÃ©rea y Neza
+const ACTIVAR_VISTAS_3D_PRESENTACION = false;
 
 export interface BarraSuperiorProps {
   modoVista: ModoVista;
@@ -63,38 +66,42 @@ export function BarraSuperior({
         </Link>
       </div>
 
-      {/* Píldora de navegación central (Inicio / Vista aérea / Cámara / Maqueta) */}
+      {/* Píldora de navegación central (Cámaras y Métricas) */}
       <div className="pointer-events-auto bg-white/85 hover:bg-white backdrop-blur-xl border border-black/5 shadow-sm rounded-full p-1 flex items-center gap-1 transition-all max-w-[calc(100vw-85px)] sm:max-w-none overflow-x-auto no-scrollbar flex-shrink">
+        {ACTIVAR_VISTAS_3D_PRESENTACION && (
+          <>
+            <button
+              onClick={() => alCambiarModoVista("perspective")}
+              className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${modoVista === "perspective"
+                ? "bg-[#18181b] text-white shadow-sm"
+                : "text-zinc-600 hover:text-zinc-900"
+                }`}
+            >
+              Inicio
+            </button>
+            <button
+              onClick={() => alCambiarModoVista("overhead")}
+              className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${modoVista === "overhead"
+                ? "bg-[#18181b] text-white shadow-sm"
+                : "text-zinc-600 hover:text-zinc-900"
+                }`}
+            >
+              <span className="hidden sm:inline">Vista </span>Aérea
+            </button>
+            <button
+              onClick={() => alCambiarModoVista(modoVista === "neza" ? "perspective" : "neza")}
+              className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 active:scale-95 ${modoVista === "neza"
+                ? "bg-[#c4501f] text-white shadow-sm ring-2 ring-[#c4501f]/30"
+                : "text-zinc-600 hover:text-zinc-900"
+                }`}
+              title="Glorieta del Coyote — Neza"
+            >
+              Neza
+            </button>
+          </>
+        )}
         <button
-          onClick={() => alCambiarModoVista("perspective")}
-          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${modoVista === "perspective"
-            ? "bg-[#18181b] text-white shadow-sm"
-            : "text-zinc-600 hover:text-zinc-900"
-            }`}
-        >
-          Inicio
-        </button>
-        <button
-          onClick={() => alCambiarModoVista("overhead")}
-          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 ${modoVista === "overhead"
-            ? "bg-[#18181b] text-white shadow-sm"
-            : "text-zinc-600 hover:text-zinc-900"
-            }`}
-        >
-          <span className="hidden sm:inline">Vista </span>Aérea
-        </button>
-        <button
-          onClick={() => alCambiarModoVista(modoVista === "neza" ? "perspective" : "neza")}
-          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 active:scale-95 ${modoVista === "neza"
-            ? "bg-[#c4501f] text-white shadow-sm ring-2 ring-[#c4501f]/30"
-            : "text-zinc-600 hover:text-zinc-900"
-            }`}
-          title="Glorieta del Coyote — Neza"
-        >
-          Neza
-        </button>
-        <button
-          onClick={() => alCambiarModoVista(modoVista === "camera" ? "perspective" : "camera")}
+          onClick={() => alCambiarModoVista("camera")}
           className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 flex items-center gap-1 active:scale-95 ${modoVista === "camera"
             ? "bg-[#f95721] text-white shadow-sm ring-2 ring-[#f95721]/30"
             : "text-zinc-600 hover:text-zinc-900"
@@ -105,7 +112,7 @@ export function BarraSuperior({
           <span>Cámara</span>
         </button>
         <button
-          onClick={() => alCambiarModoVista(modoVista === "camera_maqueta" ? "perspective" : "camera_maqueta")}
+          onClick={() => alCambiarModoVista("camera_maqueta")}
           className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 flex items-center gap-1 active:scale-95 ${modoVista === "camera_maqueta"
             ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30"
             : "text-zinc-600 hover:text-zinc-900"
@@ -116,7 +123,7 @@ export function BarraSuperior({
           <span><span className="hidden sm:inline">Cámara </span>Maqueta</span>
         </button>
         <button
-          onClick={() => alCambiarModoVista(modoVista === "camera_toycars" ? "perspective" : "camera_toycars")}
+          onClick={() => alCambiarModoVista("camera_toycars")}
           className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 flex items-center gap-1 active:scale-95 ${modoVista === "camera_toycars"
             ? "bg-cyan-600 text-white shadow-sm ring-2 ring-cyan-500/30"
             : "text-zinc-600 hover:text-zinc-900"
@@ -125,6 +132,17 @@ export function BarraSuperior({
         >
           <Camera className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-cyan-300" />
           <span><span className="hidden sm:inline">Cámara </span>ToyCars</span>
+        </button>
+        <button
+          onClick={() => alCambiarModoVista(modoVista === "metricas" ? "camera" : "metricas")}
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 flex items-center gap-1 active:scale-95 ${modoVista === "metricas"
+            ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-500/30"
+            : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          title="Historial de Métricas y Base de Datos TiDB"
+        >
+          <BarChart3 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-400" />
+          <span>Métricas</span>
         </button>
       </div>
 

@@ -5,7 +5,7 @@ import { useYoloDetector } from "@/hooks/useYoloDetector";
 import { useVideoSource } from "@/hooks/useVideoSource";
 import { useInferenceLoop } from "@/hooks/useInferenceLoop";
 import type { Zone } from "@/lib/types";
-import { Camera, Upload, Trash2, Video, RotateCw } from "lucide-react";
+import { Camera, Upload, Trash2, Video, RotateCw, Database, Check } from "lucide-react";
 
 interface Props {
   onDetections?: (count: number) => void;
@@ -42,7 +42,7 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     useVideoSource(videoRef, setError);
 
   // 3. Exact inference loop and canvas renderer from /demo
-  const { total, fps, commitZones } = useInferenceLoop({
+  const { total, fps, commitZones, detsRef } = useInferenceLoop({
     videoRef,
     canvasRef,
     detectorRef,
@@ -52,6 +52,64 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     onResize: setAspect,
     onUpdate: setBackend,
   });
+
+  // Guardado periódico en TiDB
+  const [intervaloMinutos, setIntervaloMinutos] = useState<number>(10);
+  const [guardandoDB, setGuardandoDB] = useState(false);
+  const [guardadoExitoso, setGuardadoExitoso] = useState(false);
+
+  const guardarLecturaTiDB = async () => {
+    if (guardandoDB) return;
+    setGuardandoDB(true);
+    try {
+      const dets = detsRef?.current || [];
+      const vehiculos = dets.filter((d) => {
+        const lbl = (d.label || "").toLowerCase();
+        return (
+          d.isToyCar ||
+          ["carro", "car", "camión", "autobús", "motocicleta", "toy-car", "toy cars"].some((v) => lbl.includes(v))
+        );
+      }).length;
+      const peatones = dets.filter((d) => {
+        const lbl = (d.label || "").toLowerCase();
+        return lbl.includes("persona") || lbl.includes("person") || d.classId === 0;
+      }).length;
+
+      const nivel = total > 15 ? "Alto" : total > 6 ? "Medio" : "Bajo";
+      const flujo = Math.min(100, Math.round((total / 20) * 100));
+
+      await fetch("/api/metricas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          camara: modelMode,
+          vehiculos,
+          peatones,
+          total_espera: Math.max(0, vehiculos - 2),
+          nivel_congestion: nivel,
+          flujo_porcentaje: flujo,
+          fps_promedio: fps,
+        }),
+      });
+
+      setGuardadoExitoso(true);
+      setTimeout(() => setGuardadoExitoso(false), 3000);
+    } catch (e) {
+      console.error("Error guardando en TiDB:", e);
+    } finally {
+      setGuardandoDB(false);
+    }
+  };
+
+  // Timer para auto-guardar en TiDB
+  useEffect(() => {
+    if (!intervaloMinutos || intervaloMinutos <= 0) return;
+    const ms = intervaloMinutos * 60 * 1000;
+    const timer = setInterval(() => {
+      guardarLecturaTiDB();
+    }, ms);
+    return () => clearInterval(timer);
+  }, [intervaloMinutos, modelMode, total, fps]);
 
   // Auto-start camera on mount, stop on unmount
   useEffect(() => {
@@ -288,6 +346,47 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
             <Upload className="h-3.5 w-3.5" />
             <input type="file" accept="video/*" onChange={onFile} className="sr-only" />
           </label>
+
+          {/* Control de Auto-guardado en TiDB */}
+          <span className="text-zinc-600">|</span>
+          <div className="flex items-center gap-1.5 bg-zinc-900/90 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+            <Database className="h-3 w-3 text-emerald-400" />
+            <span className="text-[10px] text-zinc-300 font-sans">TiDB:</span>
+            <select
+              value={intervaloMinutos}
+              onChange={(e) => setIntervaloMinutos(Number(e.target.value))}
+              className="bg-transparent text-[10px] text-emerald-300 font-bold outline-none cursor-pointer"
+              title="Intervalo para guardar métricas en la base de datos"
+            >
+              <option value={0} className="bg-zinc-900 text-zinc-400">Pausado</option>
+              <option value={1} className="bg-zinc-900 text-zinc-200">Cada 1 min</option>
+              <option value={5} className="bg-zinc-900 text-zinc-200">Cada 5 min</option>
+              <option value={10} className="bg-zinc-900 text-zinc-200">Cada 10 min</option>
+              <option value={30} className="bg-zinc-900 text-zinc-200">Cada 30 min</option>
+            </select>
+
+            <button
+              onClick={guardarLecturaTiDB}
+              disabled={guardandoDB}
+              className={`p-1 rounded text-[10px] font-sans font-bold flex items-center gap-1 transition-all ${
+                guardadoExitoso
+                  ? "bg-emerald-600 text-white"
+                  : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40"
+              }`}
+              title="Guardar una captura de métricas inmediatamente en TiDB"
+            >
+              {guardadoExitoso ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  <span className="hidden sm:inline">Guardado</span>
+                </>
+              ) : guardandoDB ? (
+                <span>...</span>
+              ) : (
+                <span>Guardar</span>
+              )}
+            </button>
+          </div>
         </div>
       )}
     </div>

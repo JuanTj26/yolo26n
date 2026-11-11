@@ -15,6 +15,7 @@ import {
   PanelMovil,
   MenuCapas,
   BotonRecuadros,
+  DashboardMetricas,
 } from "./panel";
 
 // Dynamic import with SSR disabled for Three.js Canvas
@@ -62,7 +63,7 @@ export default function ModernTrafficDashboard() {
     pedestrianGreen: true,
   });
 
-  const [viewMode, setViewMode] = useState<ModoVista>("perspective");
+  const [viewMode, setViewMode] = useState<ModoVista>("camera");
   const [isPaused, setIsPaused] = useState(false);
   const [showDetections, setShowDetections] = useState(true);
   const [showLayerDrawer, setShowLayerDrawer] = useState(false);
@@ -234,6 +235,11 @@ export default function ModernTrafficDashboard() {
         modoDia={dayMode}
         alCambiarModoDia={setDayMode}
       />
+
+      {/* ── Dashboard de Métricas TiDB ── */}
+      {viewMode === "metricas" && (
+        <DashboardMetricas onVolver={() => setViewMode("camera")} />
+      )}
     </div>
   );
 }
