@@ -203,7 +203,7 @@ export function useInferenceLoop({
       }
     };
 
-    // Inferencia: bucle rápido no bloqueante
+    // Inferencia: bucle con throttle para no saturar la CPU ni congelar la UI
     const inferInterval = setInterval(() => {
       const video  = videoRef.current;
       const canvas = canvasRef.current;
@@ -221,7 +221,7 @@ export function useInferenceLoop({
 
       const det = detectorRef.current;
       if (det && !busy && !disabled) runInference(video, det);
-    }, 0);
+    }, 35);
 
     // Dibujo continuo a 60 FPS
     let drawRaf = 0;

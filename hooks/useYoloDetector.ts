@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { YoloDetector, DualYoloDetector } from "@/lib/yolo";
 import type { ModelStatus } from "@/lib/types";
 
-export type DetectorMode = "dual" | "maqueta" | "general";
+export type DetectorMode = "dual" | "maqueta" | "toycars" | "general";
 
 export function useYoloDetector(initialMode: DetectorMode = "dual") {
   const detectorRef = useRef<YoloDetector | DualYoloDetector | null>(null);
@@ -28,6 +28,8 @@ export function useYoloDetector(initialMode: DetectorMode = "dual") {
           );
         } else if (modelMode === "maqueta") {
           detector = await DualYoloDetector.createBestOnly("/models/best.onnx");
+        } else if (modelMode === "toycars") {
+          detector = await DualYoloDetector.createToyCarsOnly("/models/toycars.onnx?v=webgpu");
         } else {
           detector = await YoloDetector.create("/models/yolo26n_webgpu.onnx", {
             inputSize: 320,

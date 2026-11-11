@@ -524,9 +524,31 @@ export class DualYoloDetector {
   }
 
   static async createBestOnly(urlBest = "/models/best.onnx"): Promise<YoloDetector> {
-    return await YoloDetector.create(urlBest, {
+    try {
+      return await YoloDetector.create(urlBest, {
+        classLabels: { 0: "toy-car" },
+        defaultColor: "#f95721",
+        confThreshold: 0.35,
+        iouThreshold: 0.35,
+        isToyCarModel: true,
+        inputSize: 640,
+      });
+    } catch {
+      return await YoloDetector.create("/models/best (1).onnx", {
+        classLabels: { 0: "toy-car" },
+        defaultColor: "#f95721",
+        confThreshold: 0.35,
+        iouThreshold: 0.35,
+        isToyCarModel: true,
+        inputSize: 640,
+      });
+    }
+  }
+
+  static async createToyCarsOnly(urlToyCars = "/models/toycars.onnx?v=webgpu"): Promise<YoloDetector> {
+    return await YoloDetector.create(urlToyCars, {
       classLabels: { 0: "toy-car" },
-      defaultColor: "#f95721",
+      defaultColor: "#06b6d4", // Cyan brillante distintivo para el modelo toycars
       confThreshold: 0.35,
       iouThreshold: 0.35,
       isToyCarModel: true,

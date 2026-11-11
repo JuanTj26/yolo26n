@@ -115,10 +115,21 @@ export function BarraSuperior({
           <Camera className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-300" />
           <span><span className="hidden sm:inline">Cámara </span>Maqueta</span>
         </button>
+        <button
+          onClick={() => alCambiarModoVista(modoVista === "camera_toycars" ? "perspective" : "camera_toycars")}
+          className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 flex items-center gap-1 active:scale-95 ${modoVista === "camera_toycars"
+            ? "bg-cyan-600 text-white shadow-sm ring-2 ring-cyan-500/30"
+            : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          title="Cámara ToyCars — Modelo toycars.onnx (YOLO 640px)"
+        >
+          <Camera className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-cyan-300" />
+          <span><span className="hidden sm:inline">Cámara </span>ToyCars</span>
+        </button>
       </div>
 
       {/* Selector de Iluminación Ambiental (Día / Atardecer / Noche) */}
-      {modoVista !== "camera" && modoVista !== "camera_maqueta" && (
+      {modoVista !== "camera" && modoVista !== "camera_maqueta" && modoVista !== "camera_toycars" && (
         <div className="pointer-events-auto hidden md:flex items-center bg-white/90 hover:bg-white backdrop-blur-xl border border-black/5 shadow-sm rounded-full p-1 gap-1 transition-all">
           <button
             onClick={() => alCambiarModoDia("day")}
@@ -157,7 +168,7 @@ export function BarraSuperior({
       )}
 
       {/* Checkbox: Giro automático */}
-      {modoVista !== "camera" && modoVista !== "camera_maqueta" && (
+      {modoVista !== "camera" && modoVista !== "camera_maqueta" && modoVista !== "camera_toycars" && (
         <label
           className={`pointer-events-auto hidden md:flex items-center gap-2 bg-white/90 hover:bg-white backdrop-blur-xl border border-black/5 shadow-sm rounded-full px-3.5 py-1.5 cursor-pointer text-xs font-semibold select-none transition-all hover:scale-105 active:scale-95 ${giroAutomatico ? "text-[#f95721] ring-2 ring-[#f95721]/30" : "text-zinc-700"
             }`}

@@ -9,7 +9,7 @@ import { Camera, Upload, Trash2, Video, RotateCw } from "lucide-react";
 
 interface Props {
   onDetections?: (count: number) => void;
-  initialModelMode?: "dual" | "maqueta" | "general";
+  initialModelMode?: "dual" | "maqueta" | "toycars" | "general";
 }
 
 const MAX_ZONES = 4;
@@ -217,7 +217,8 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
             className="bg-zinc-800 border border-white/20 text-[#f95721] font-semibold rounded px-2 py-0.5 text-[11px] font-sans outline-none cursor-pointer"
             title="Seleccionar modelo de detección"
           >
-            <option value="maqueta">🏎️ Carritos (best.onnx)</option>
+            <option value="maqueta">🏎️ Maqueta (best.onnx)</option>
+            <option value="toycars">🚗 ToyCars (toycars.onnx)</option>
             <option value="dual">👥 Dual (Carritos + Personas)</option>
             <option value="general">🌐 General (COCO)</option>
           </select>

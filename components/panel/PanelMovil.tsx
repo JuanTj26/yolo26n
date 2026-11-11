@@ -72,7 +72,7 @@ export function PanelMovil({
   return (
     <>
       {/* ── MODO CÁMARA ESCRITORIO (Alineado a la IZQUIERDA para no estorbar el selector de cámara) ── */}
-      {(modoVista === "camera" || modoVista === "camera_maqueta") && (
+      {(modoVista === "camera" || modoVista === "camera_maqueta" || modoVista === "camera_toycars") && (
         <div className="hidden md:block fixed bottom-4 sm:bottom-6 left-4 sm:left-6 z-30 pointer-events-auto max-w-fit">
           {expandido && (
             <div className="mb-3 bg-black/80 backdrop-blur-xl border border-white/15 rounded-2xl p-4 shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200 text-white">
@@ -250,7 +250,7 @@ export function PanelMovil({
       )}
 
       {/* ── VISTA MÓVIL (Pantallas < md, solo modo 3D) ── */}
-      {modoVista !== "camera" && modoVista !== "camera_maqueta" && (
+      {modoVista !== "camera" && modoVista !== "camera_maqueta" && modoVista !== "camera_toycars" && (
         <div className="md:hidden fixed bottom-3 inset-x-3 z-30 pointer-events-auto">
         {expandido && (
           <div className="mb-2 bg-white/95 backdrop-blur-xl border border-black/10 rounded-2xl p-4 shadow-2xl animate-in slide-in-from-bottom-3 duration-200">

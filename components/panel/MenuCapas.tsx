@@ -117,6 +117,16 @@ export const MenuCapas: React.FC<MenuCapasProps> = ({
         </button>
         <button
           onClick={() => {
+            alCambiarModoVista("camera_toycars");
+            alCerrar();
+          }}
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-[11px] font-semibold transition-colors"
+        >
+          <Scan className="h-3 w-3" />
+          <span>Cámara ToyCars (toycars.onnx)</span>
+        </button>
+        <button
+          onClick={() => {
             alCambiarModoVista("camera");
             alCerrar();
           }}

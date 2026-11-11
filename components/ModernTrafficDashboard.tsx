@@ -114,7 +114,7 @@ export default function ModernTrafficDashboard() {
     Math.min(94, Math.round(58 + s.flow * 3.5 - totalWaiting * 1.2))
   );
 
-  const isCamera = viewMode === "camera" || viewMode === "camera_maqueta";
+  const isCamera = viewMode === "camera" || viewMode === "camera_maqueta" || viewMode === "camera_toycars";
 
   return (
     <div
@@ -146,7 +146,13 @@ export default function ModernTrafficDashboard() {
         />
       ) : (
         <YoloBackgroundCamera
-          initialModelMode={viewMode === "camera_maqueta" ? "maqueta" : "dual"}
+          initialModelMode={
+            viewMode === "camera_maqueta"
+              ? "maqueta"
+              : viewMode === "camera_toycars"
+                ? "toycars"
+                : "dual"
+          }
           onDetections={(count) => {
             setS((prev) => ({
               ...prev,
