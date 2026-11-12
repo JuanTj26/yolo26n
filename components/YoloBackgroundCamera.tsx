@@ -54,9 +54,13 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
   });
 
   // Guardado periódico en TiDB
-  const [intervaloMinutos, setIntervaloMinutos] = useState<number>(10);
+  const [intervaloMinutos, setIntervaloMinutos] = useState<number>(1);
   const [guardandoDB, setGuardandoDB] = useState(false);
   const [guardadoExitoso, setGuardadoExitoso] = useState(false);
+
+  // Refs para capturar siempre los valores más recientes sin reiniciar el timer
+  const latestDataRef = useRef({ total: 0, fps: 0, modelMode: "dual" });
+  latestDataRef.current = { total, fps, modelMode };
 
   const guardarLecturaTiDB = async () => {
     if (guardandoDB) return;
@@ -75,25 +79,33 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
         return lbl.includes("persona") || lbl.includes("person") || d.classId === 0;
       }).length;
 
-      const nivel = total > 15 ? "Alto" : total > 6 ? "Medio" : "Bajo";
-      const flujo = Math.min(100, Math.round((total / 20) * 100));
+      const currentTotal = latestDataRef.current.total;
+      const currentFps = latestDataRef.current.fps;
+      const currentMode = latestDataRef.current.modelMode;
 
-      await fetch("/api/metricas", {
+      const nivel = currentTotal > 15 ? "Alto" : currentTotal > 6 ? "Medio" : "Bajo";
+      const flujo = Math.min(100, Math.round((currentTotal / 20) * 100));
+
+      console.log("Guardando automáticamente en base de datos...", { vehiculos, peatones, currentTotal });
+
+      const res = await fetch("/api/metricas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          camara: modelMode,
+          camara: currentMode,
           vehiculos,
           peatones,
           total_espera: Math.max(0, vehiculos - 2),
           nivel_congestion: nivel,
           flujo_porcentaje: flujo,
-          fps_promedio: fps,
+          fps_promedio: currentFps,
         }),
       });
 
-      setGuardadoExitoso(true);
-      setTimeout(() => setGuardadoExitoso(false), 3000);
+      if (res.ok) {
+        setGuardadoExitoso(true);
+        setTimeout(() => setGuardadoExitoso(false), 3000);
+      }
     } catch (e) {
       console.error("Error guardando en TiDB:", e);
     } finally {
@@ -101,15 +113,17 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     }
   };
 
-  // Timer para auto-guardar en TiDB
+  // Timer ESTABLE: No se reinicia con cada frame de detección (fps o total)
   useEffect(() => {
     if (!intervaloMinutos || intervaloMinutos <= 0) return;
     const ms = intervaloMinutos * 60 * 1000;
+
     const timer = setInterval(() => {
       guardarLecturaTiDB();
     }, ms);
+
     return () => clearInterval(timer);
-  }, [intervaloMinutos, modelMode, total, fps]);
+  }, [intervaloMinutos]);
 
   // Auto-start camera on mount, stop on unmount
   useEffect(() => {
@@ -119,9 +133,13 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     };
   }, [startWebcam, stopSource]);
 
-  // Sync detections with parent dashboard
+  // Sync detections with parent dashboard (guard against re-triggering parent renders)
+  const prevTotalRef = useRef<number>(-1);
   useEffect(() => {
-    onDetections?.(total);
+    if (prevTotalRef.current !== total) {
+      prevTotalRef.current = total;
+      onDetections?.(total);
+    }
   }, [total, onDetections]);
 
   // Zone management (same as /demo)
@@ -187,15 +205,15 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
         onPointerUp={onPointerUp}
       />
 
-      {/* ── Inactive Overlay if camera is off ── */}
-      {source === "ninguna" && (
+      {/* ── Inactive Overlay SOLO si ocurre un error real al abrir la cámara ── */}
+      {source === "ninguna" && Boolean(error) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-20 bg-black/80 backdrop-blur-sm">
           <div className="h-16 w-16 rounded-2xl bg-[#e00000]/20 border border-[#e00000]/30 flex items-center justify-center text-[#e00000] mb-4">
             <Video className="h-8 w-8" />
           </div>
-          <h2 className="text-xl font-bold text-white mb-2 font-display">Cámara YOLO26n (Demo)</h2>
+          <h2 className="text-xl font-bold text-white mb-2 font-display">Cámara no disponible</h2>
           <p className="text-sm text-zinc-400 max-w-sm mb-6">
-            Activa tu cámara web o sube un video para iniciar la detección en tiempo real.
+            No se pudo iniciar la cámara automáticamente. Puedes reintentar o seleccionar otro dispositivo.
           </p>
           <div className="flex items-center gap-2 mb-4 bg-zinc-900/90 border border-white/10 px-3 py-2 rounded-xl">
             <Camera className="h-4 w-4 text-[#f95721] flex-shrink-0" />
@@ -232,7 +250,7 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
               className="px-5 py-2.5 rounded-xl bg-[#e00000] hover:bg-[#ff1a1a] text-white text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95"
             >
               <Camera className="h-4 w-4" />
-              <span>Activar Cámara</span>
+              <span>Reintentar Cámara</span>
             </button>
             <label className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all border border-white/10">
               <Upload className="h-4 w-4" />
@@ -275,10 +293,10 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
             className="bg-zinc-800 border border-white/20 text-[#f95721] font-semibold rounded px-2 py-0.5 text-[11px] font-sans outline-none cursor-pointer"
             title="Seleccionar modelo de detección"
           >
-            <option value="maqueta">🏎️ Maqueta (best.onnx)</option>
-            <option value="toycars">🚗 ToyCars (toycars.onnx)</option>
-            <option value="dual">👥 Dual (Carritos + Personas)</option>
-            <option value="general">🌐 General (COCO)</option>
+            <option value="maqueta">Maqueta (best.onnx)</option>
+            <option value="toycars">ToyCars (toycars.onnx)</option>
+            <option value="dual">Dual (Carritos + Personas)</option>
+            <option value="general">General (COCO)</option>
           </select>
 
           <span className="text-zinc-600">|</span>

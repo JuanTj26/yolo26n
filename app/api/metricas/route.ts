@@ -30,7 +30,7 @@ async function asegurarTabla(conn: mysql.Connection) {
   await conn.execute(query);
 }
 
-// GET: Consultar el historial de métricas
+// READ (GET): Consultar métricas (últimas 100)
 export async function GET() {
   let conn: mysql.Connection | null = null;
   try {
@@ -38,16 +38,10 @@ export async function GET() {
     await asegurarTabla(conn);
 
     const [filas] = await conn.execute(
-      "SELECT * FROM metricas_trafico ORDER BY id DESC LIMIT 50"
+      "SELECT * FROM metricas_trafico ORDER BY id DESC LIMIT 100"
     );
     return NextResponse.json({ ok: true, datos: filas });
   } catch (err: unknown) {
-    console.log("DEBUG", {
-      userLen: process.env.DB_USER?.length,
-      userEnd: JSON.stringify(process.env.DB_USER?.slice(-6)),
-      passLen: process.env.DB_PASSWORD?.length,
-      hostOk: process.env.DB_HOST === "gateway01.us-east-1.prod.aws.tidbcloud.com",
-    });
     const mensaje = err instanceof Error ? err.message : "Error al consultar TiDB";
     return NextResponse.json({ ok: false, error: mensaje }, { status: 500 });
   } finally {
@@ -55,7 +49,24 @@ export async function GET() {
   }
 }
 
-// POST: Guardar una nueva lectura de la cámara
+// Helper para obtener fecha y hora exacta en zona horaria de México (America/Mexico_City)
+function obtenerFechaHoraMexico(): string {
+  const ahora = new Date();
+  const formato = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  // Retorna "YYYY-MM-DD HH:MM:SS"
+  return formato.format(ahora).replace(",", "");
+}
+
+// CREATE (POST): Guardar una nueva medición
 export async function POST(req: Request) {
   let conn: mysql.Connection | null = null;
   try {
@@ -73,12 +84,15 @@ export async function POST(req: Request) {
     conn = await obtenerConexion();
     await asegurarTabla(conn);
 
+    const fechaHoraMexico = obtenerFechaHoraMexico();
+
     const insertSql = `
-      INSERT INTO metricas_trafico (camara, vehiculos, peatones, total_espera, nivel_congestion, flujo_porcentaje, fps_promedio)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO metricas_trafico (fecha_hora, camara, vehiculos, peatones, total_espera, nivel_congestion, flujo_porcentaje, fps_promedio)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const [resultado] = await conn.execute(insertSql, [
+      fechaHoraMexico,
       camara,
       Number(vehiculos) || 0,
       Number(peatones) || 0,
@@ -90,12 +104,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, resultado });
   } catch (err: unknown) {
-    console.log("DEBUG", {
-      userLen: process.env.DB_USER?.length,
-      userEnd: JSON.stringify(process.env.DB_USER?.slice(-6)),
-      passLen: process.env.DB_PASSWORD?.length,
-      hostOk: process.env.DB_HOST === "gateway01.us-east-1.prod.aws.tidbcloud.com",
-    });
     const mensaje = err instanceof Error ? err.message : "Error al guardar en TiDB";
     return NextResponse.json({ ok: false, error: mensaje }, { status: 500 });
   } finally {
@@ -103,3 +111,82 @@ export async function POST(req: Request) {
   }
 }
 
+// UPDATE (PUT): Editar un registro existente por ID
+export async function PUT(req: Request) {
+  let conn: mysql.Connection | null = null;
+  try {
+    const body = await req.json();
+    const {
+      id,
+      camara,
+      vehiculos,
+      peatones,
+      total_espera,
+      nivel_congestion,
+      flujo_porcentaje,
+    } = body;
+
+    if (!id) {
+      return NextResponse.json({ ok: false, error: "ID requerido para actualizar" }, { status: 400 });
+    }
+
+    conn = await obtenerConexion();
+
+    const updateSql = `
+      UPDATE metricas_trafico
+      SET camara = COALESCE(?, camara),
+          vehiculos = COALESCE(?, vehiculos),
+          peatones = COALESCE(?, peatones),
+          total_espera = COALESCE(?, total_espera),
+          nivel_congestion = COALESCE(?, nivel_congestion),
+          flujo_porcentaje = COALESCE(?, flujo_porcentaje)
+      WHERE id = ?
+    `;
+
+    await conn.execute(updateSql, [
+      camara ?? null,
+      vehiculos !== undefined ? Number(vehiculos) : null,
+      peatones !== undefined ? Number(peatones) : null,
+      total_espera !== undefined ? Number(total_espera) : null,
+      nivel_congestion ?? null,
+      flujo_porcentaje !== undefined ? Number(flujo_porcentaje) : null,
+      Number(id),
+    ]);
+
+    return NextResponse.json({ ok: true, mensaje: "Métrica actualizada con éxito" });
+  } catch (err: unknown) {
+    const mensaje = err instanceof Error ? err.message : "Error al actualizar en TiDB";
+    return NextResponse.json({ ok: false, error: mensaje }, { status: 500 });
+  } finally {
+    if (conn) await conn.end();
+  }
+}
+
+// DELETE (DELETE): Borrar un registro o limpiar todo
+export async function DELETE(req: Request) {
+  let conn: mysql.Connection | null = null;
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    const limpiarTodo = searchParams.get("todo");
+
+    conn = await obtenerConexion();
+
+    if (limpiarTodo === "true") {
+      await conn.execute("TRUNCATE TABLE metricas_trafico");
+      return NextResponse.json({ ok: true, mensaje: "Historial limpiado completamente" });
+    }
+
+    if (!id) {
+      return NextResponse.json({ ok: false, error: "ID requerido para eliminar" }, { status: 400 });
+    }
+
+    await conn.execute("DELETE FROM metricas_trafico WHERE id = ?", [Number(id)]);
+    return NextResponse.json({ ok: true, mensaje: `Métrica con ID ${id} eliminada` });
+  } catch (err: unknown) {
+    const mensaje = err instanceof Error ? err.message : "Error al eliminar en TiDB";
+    return NextResponse.json({ ok: false, error: mensaje }, { status: 500 });
+  } finally {
+    if (conn) await conn.end();
+  }
+}

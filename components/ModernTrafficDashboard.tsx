@@ -155,10 +155,13 @@ export default function ModernTrafficDashboard() {
                 : "dual"
           }
           onDetections={(count) => {
-            setS((prev) => ({
-              ...prev,
-              onScreen: count,
-            }));
+            setS((prev) => {
+              if (prev.onScreen === count) return prev;
+              return {
+                ...prev,
+                onScreen: count,
+              };
+            });
           }}
         />
       )}
