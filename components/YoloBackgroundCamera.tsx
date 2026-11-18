@@ -25,6 +25,7 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
   const [error, setError] = useState("");
   const [, setAspect] = useState(16 / 9);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   // 1. Exact detector hook with dynamic mode support
   const { detectorRef, modelStatus, backend, setBackend, modelMode, setModelMode } =
@@ -149,40 +150,59 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     commitZones(next);
   };
 
-  const toNorm = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
+  // Convierte coordenadas de cliente a normalizadas [0,1] usando el canvas como referencia
+  const toNorm = (clientX: number, clientY: number) => {
+    const r = canvasRef.current?.getBoundingClientRect();
+    if (!r) return { x: 0, y: 0 };
     return {
-      x: clamp01((e.clientX - r.left) / r.width),
-      y: clamp01((e.clientY - r.top) / r.height),
+      x: clamp01((clientX - r.left) / r.width),
+      y: clamp01((clientY - r.top)  / r.height),
     };
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if ((zonesRef.current ?? []).length >= MAX_ZONES) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragStartRef.current = toNorm(e);
+    e.preventDefault();
+    dragStartRef.current = toNorm(e.clientX, e.clientY);
+    setIsDrawing(true);
   };
 
-  const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const s = dragStartRef.current;
-    if (!s) return;
-    const p = toNorm(e);
-    draftRef.current = {
-      x: Math.min(s.x, p.x),
-      y: Math.min(s.y, p.y),
-      w: Math.abs(p.x - s.x),
-      h: Math.abs(p.y - s.y),
+  // Listeners globales en window para que el drag no se trabe al pasar sobre paneles
+  useEffect(() => {
+    if (!isDrawing) return;
+
+    const onMove = (e: PointerEvent) => {
+      const s = dragStartRef.current;
+      if (!s) return;
+      const p = toNorm(e.clientX, e.clientY);
+      draftRef.current = {
+        x: Math.min(s.x, p.x),
+        y: Math.min(s.y, p.y),
+        w: Math.abs(p.x - s.x),
+        h: Math.abs(p.y - s.y),
+      };
     };
-  };
 
-  const onPointerUp = () => {
-    const z = draftRef.current;
-    dragStartRef.current = null;
-    draftRef.current = null;
-    if (z && z.w > 0.03 && z.h > 0.03) {
-      handleCommitZones([...(zonesRef.current ?? []), z]);
-    }
-  };
+    const onUp = () => {
+      const z = draftRef.current;
+      dragStartRef.current = null;
+      draftRef.current    = null;
+      setIsDrawing(false);
+      if (z && z.w > 0.03 && z.h > 0.03) {
+        handleCommitZones([...(zonesRef.current ?? []), z]);
+      }
+    };
+
+    window.addEventListener("pointermove",   onMove);
+    window.addEventListener("pointerup",     onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove",   onMove);
+      window.removeEventListener("pointerup",     onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDrawing]);
 
   return (
     <div className="fixed inset-0 z-0 bg-zinc-950 overflow-hidden select-none">
@@ -199,10 +219,9 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
       {/* ── Exact Canvas overlay from /demo with Cyan boxes & Traffic Zones ── */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full object-cover z-10 cursor-crosshair"
+        className="absolute inset-0 w-full h-full object-cover z-10 cursor-crosshair touch-none"
+        style={{ touchAction: "none" }}
         onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
       />
 
       {/* ── Inactive Overlay SOLO si ocurre un error real al abrir la cámara ── */}
@@ -268,7 +287,7 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
 
       {/* ── Bottom Floating Status Pill (Matches /demo stats) ── */}
       {source !== "ninguna" && (
-        <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-30 flex items-center gap-2 bg-black/85 backdrop-blur-md border border-white/15 px-3 sm:px-3.5 py-1.5 rounded-full text-white text-xs font-mono shadow-2xl pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar">
+        <div className={`fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-30 flex items-center gap-2 bg-black/85 backdrop-blur-md border border-white/15 px-3 sm:px-3.5 py-1.5 rounded-full text-white text-xs font-mono shadow-2xl pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar transition-opacity duration-150 ${isDrawing ? "opacity-0 pointer-events-none" : ""}`}>
           {/* Status Dot */}
           <span className="relative flex h-2 w-2">
             {modelStatus === "listo" && (

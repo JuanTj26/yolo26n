@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { simRef } from "@/components/TrafficScene";
 import { queueLen } from "@/lib/traffic-sim";
@@ -63,7 +63,7 @@ export default function ModernTrafficDashboard() {
     pedestrianGreen: true,
   });
 
-  const [viewMode, setViewMode] = useState<ModoVista>("camera");
+  const [viewMode, setViewMode] = useState<ModoVista>("perspective");
   const [isPaused, setIsPaused] = useState(false);
   const [showDetections, setShowDetections] = useState(true);
   const [showLayerDrawer, setShowLayerDrawer] = useState(false);
@@ -73,6 +73,30 @@ export default function ModernTrafficDashboard() {
   // Mobile: Bottom Sheet is collapsed by default so 3D intersection is 100% visible
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const [mobileTab, setMobileTab] = useState<"vision" | "espera" | "flujo">("espera");
+
+  // Referencia al iframe de Glorieta del Coyote para sincronizar controles
+  const coyoteIframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Al cambiar al modo Neza (Glorieta del Coyote), activar siempre Atardecer
+  useEffect(() => {
+    if (viewMode === "neza") {
+      setDayMode("sunset");
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (viewMode === "neza" && coyoteIframeRef.current?.contentWindow) {
+      coyoteIframeRef.current.contentWindow.postMessage(
+        {
+          type: "SYNC_NEZA",
+          dayMode: dayMode === "sunset" ? "dusk" : dayMode,
+          autoRotate,
+          isPaused,
+        },
+        "*"
+      );
+    }
+  }, [viewMode, dayMode, autoRotate, isPaused]);
 
   useEffect(() => {
     const hist: number[] = [];
@@ -131,10 +155,22 @@ export default function ModernTrafficDashboard() {
       {/* ── Capa de Fondo: Escena 3D Three.js, Cámara YOLO o Glorieta del Coyote ── */}
       {viewMode === "neza" ? (
         <iframe
+          ref={coyoteIframeRef}
           src="/glorieta-del-coyote.html"
           className="fixed inset-0 w-full h-full border-0 z-0"
           title="Glorieta del Coyote — Neza"
           sandbox="allow-scripts allow-same-origin"
+          onLoad={() => {
+            coyoteIframeRef.current?.contentWindow?.postMessage(
+              {
+                type: "SYNC_NEZA",
+                dayMode: dayMode === "sunset" ? "dusk" : dayMode,
+                autoRotate,
+                isPaused,
+              },
+              "*"
+            );
+          }}
         />
       ) : !isCamera ? (
         <TrafficScene
@@ -201,7 +237,7 @@ export default function ModernTrafficDashboard() {
       </div>
 
       {/* ── Panel Móvil (Inferior Desplegable / Cápsula izquierda) ── */}
-      {viewMode !== "neza" && (
+      {!isCamera && viewMode !== "neza" && (
         <PanelMovil
           s={s}
           totalEsperando={totalWaiting}

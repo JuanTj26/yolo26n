@@ -30,9 +30,9 @@ body{background:var(--bg);color:var(--fg);font-family:var(--font-body);overflow:
 #stage canvas:active{cursor:grabbing}
 .fail{margin:2rem;max-width:36ch;line-height:1.5}
 
-.title,.panel{
-  position:fixed;background:var(--panel);border:1px solid var(--line);
-  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:14px;
+/* Ocultar tarjetas internas para que use los controles de la barra superior */
+.title, .panel, .hint {
+  display: none !important;
 }
 .title{
   top:calc(12px + env(safe-area-inset-top,0px));
@@ -177,7 +177,7 @@ coyoteLight.position.set(6,10,6);
 scene.add(coyoteLight);
 
 const AVENUES=[0.15,1.6,3.25,4.6];
-const AV_LEN=106;
+const AV_LEN=220;
 const AV_START=25;
 const asphalt=L(0x3b3e44);
 const groundMat=new THREE.MeshLambertMaterial({color:0x77716e});
@@ -357,33 +357,6 @@ for(let i=0;i<AVENUES.length;i++){
   }
 }
 
-/* ---------- rotulos ---------- */
-const labels=[];
-function makeLabel(text){
-  const c=document.createElement('canvas');c.width=512;c.height=112;
-  const tex=new THREE.CanvasTexture(c);
-  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}));
-  sp.scale.set(24,5.25,1);
-  function draw(t){
-    const g=c.getContext('2d');g.clearRect(0,0,512,112);
-    g.fillStyle='rgba(17,30,24,.88)';
-    const r=22,x=4,y=8,w=504,h=96;
-    g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();g.fill();
-    g.fillStyle='#ffffff';g.font='700 44px "DM Sans",Arial,sans-serif';g.textAlign='center';g.textBaseline='middle';
-    g.fillText(t,256,58,470);
-    tex.needsUpdate=true;
-  }
-  draw(text);
-  return {sprite:sp,draw};
-}
-avGroups.forEach((g,i)=>{
-  const lb=makeLabel('Avenida '+(i+1));
-  lb.sprite.position.set(58,14,0);
-  g.add(lb.sprite);labels.push(lb);
-  const inp=document.getElementById('n'+i);
-  inp.addEventListener('input',()=>lb.draw(inp.value.trim()||('Avenida '+(i+1))));
-});
-
 /* ---------- edificios ---------- */
 function tex(lit,seedOff){
   const c=document.createElement('canvas');c.width=c.height=128;
@@ -444,24 +417,79 @@ function makeCar(micro){
   if(micro)g.scale.set(1.45,1.3,1.1);
   return g;
 }
-const ringCars=[],avCars=[];
-[[17,7,7.4],[22,9,6.4]].forEach(([r,n,v])=>{
-  for(let i=0;i<n;i++){
-    const car=makeCar(rand()<.14);scene.add(car);
-    ringCars.push({car,r,v,th0:i/n*TAU+R(-.08,.08)});
+
+// 1. Pocos autos en el centro (solo 3 en el anillo interior para no saturar la glorieta)
+const ringCars = [];
+[[17.5, 3, 6.8]].forEach(([r, n, v]) => {
+  for (let i = 0; i < n; i++) {
+    const car = makeCar(rand() < 0.16);
+    scene.add(car);
+    ringCars.push({ car, r, v, th0: (i / n) * TAU });
   }
 });
-avGroups.forEach((g)=>{
-  const v=R(8,10);
-  for(let lane=0;lane<2;lane++){
-    const n=6;
-    for(let i=0;i<n;i++){
-      const car=makeCar(rand()<.16);
-      if(lane===1)car.rotation.y=Math.PI;
-      g.add(car);
-      avCars.push({car,lane,v,s0:i/n*AV_LEN+R(-3,3)});
-    }
-  }
+
+// 2. Tráfico abundante en las 4 carreteras/avenidas (32 autos transitando)
+const D_START = 220; // profundidad en la niebla donde los autos aparecen/desaparecen invisiblemente
+const D_GLORIETA = 24.0;
+const D_IN = D_START - D_GLORIETA; // 196m
+
+function getAvenueWorld(avIdx, d, zLocal) {
+  const phi = -AVENUES[avIdx];
+  const wx = d * Math.cos(phi) + zLocal * Math.sin(phi);
+  const wz = -d * Math.sin(phi) + zLocal * Math.cos(phi);
+  return { wx, wz, phi };
+}
+
+// 32 rutas distribuidas entre las 4 carreteras (8 autos por cada avenida)
+const ROUTES = [];
+for (let inAv = 0; inAv < 4; inAv++) {
+  // 3 autos cruzando recto a la avenida opuesta
+  ROUTES.push({ inAv, outAv: (inAv + 2) % 4 });
+  ROUTES.push({ inAv, outAv: (inAv + 2) % 4 });
+  ROUTES.push({ inAv, outAv: (inAv + 2) % 4 });
+  // 3 autos girando a la derecha
+  ROUTES.push({ inAv, outAv: (inAv + 1) % 4 });
+  ROUTES.push({ inAv, outAv: (inAv + 1) % 4 });
+  ROUTES.push({ inAv, outAv: (inAv + 1) % 4 });
+  // 2 autos girando a la izquierda
+  ROUTES.push({ inAv, outAv: (inAv + 3) % 4 });
+  ROUTES.push({ inAv, outAv: (inAv + 3) % 4 });
+}
+
+const flowCars = [];
+const CAR_SPEED = 9.4; // velocidad urbana fluida
+
+ROUTES.forEach((route, idx) => {
+  const pIn = getAvenueWorld(route.inAv, D_GLORIETA, -3.5);
+  const thIn = Math.atan2(pIn.wz, pIn.wx);
+  const pOut = getAvenueWorld(route.outAv, D_GLORIETA, 3.5);
+  const thOut = Math.atan2(pOut.wz, pOut.wx);
+
+  let dTh = thIn - thOut;
+  while (dTh <= 0) dTh += TAU;
+  while (dTh > TAU) dTh -= TAU;
+
+  const arcLen = dTh * 21.0;
+  const totalLen = D_IN + arcLen + D_IN;
+
+  const car = makeCar(rand() < 0.20);
+  scene.add(car);
+
+  // Espaciado uniforme para que los autos estén distribuidos en toda la ciudad sin amontonarse
+  const s0 = (idx / ROUTES.length) * totalLen;
+
+  flowCars.push({
+    car,
+    inAv: route.inAv,
+    outAv: route.outAv,
+    thIn,
+    thOut,
+    dTh,
+    arcLen,
+    totalLen,
+    s0,
+    speed: CAR_SPEED
+  });
 });
 
 /* ---------- hora del dia ---------- */
@@ -533,20 +561,65 @@ cv.addEventListener('wheel',e=>{e.preventDefault();goal.dist=clamp(goal.dist*Mat
 /* ---------- bucle ---------- */
 const speedEl=document.getElementById('speed');
 let last=performance.now(),t=0;
+let isPaused=false;
+
+// Sincronización con los botones de la barra superior del dashboard
+window.addEventListener('message', (e) => {
+  if (!e.data || e.data.type !== 'SYNC_NEZA') return;
+  if (e.data.dayMode && MODES[e.data.dayMode]) {
+    setMode(e.data.dayMode);
+  }
+  if (typeof e.data.autoRotate === 'boolean') {
+    auto = e.data.autoRotate;
+    if (autoEl) autoEl.checked = auto;
+  }
+  if (typeof e.data.isPaused === 'boolean') {
+    isPaused = e.data.isPaused;
+  }
+});
+
 function frame(now){
   const dt=Math.min(.05,(now-last)/1000);last=now;
-  t+=dt*parseFloat(speedEl.value);
-  for(const c of ringCars){
-    const th=c.th0-(c.v/c.r)*t;
-    c.car.position.set(Math.cos(th)*c.r,0,Math.sin(th)*c.r);
-    c.car.rotation.y=Math.atan2(Math.cos(th),Math.sin(th));
+  if(!isPaused){
+    t+=dt*parseFloat(speedEl?speedEl.value:1);
+    for(const c of ringCars){
+      const th=c.th0-(c.v/c.r)*t;
+      c.car.position.set(Math.cos(th)*c.r,0,Math.sin(th)*c.r);
+      c.car.rotation.y = -Math.atan2(-Math.cos(th), Math.sin(th));
+    }
+    for(const c of flowCars){
+      const dist = (c.s0 + c.speed * t) % c.totalLen;
+      let wx, wz, rotY;
+
+      if (dist <= D_IN) {
+        // 1. Tramo de entrada desde la niebla lejana hacia la glorieta (100% carril de asfalto)
+        const d = D_START - dist;
+        const pt = getAvenueWorld(c.inAv, d, -3.5);
+        wx = pt.wx;
+        wz = pt.wz;
+        rotY = -Math.atan2(Math.sin(pt.phi), -Math.cos(pt.phi));
+      } else if (dist <= D_IN + c.arcLen) {
+        // 2. Tramo en la glorieta: curva continua y fluida alrededor del coyote
+        const p = (dist - D_IN) / c.arcLen;
+        const th = c.thIn - p * c.dTh;
+        const r_cur = 24.25 - 3.25 * Math.sin(p * Math.PI);
+        wx = Math.cos(th) * r_cur;
+        wz = Math.sin(th) * r_cur;
+        rotY = -Math.atan2(-Math.cos(th), Math.sin(th));
+      } else {
+        // 3. Tramo de salida hacia el horizonte (100% carril de asfalto)
+        const d = D_GLORIETA + (dist - D_IN - c.arcLen);
+        const pt = getAvenueWorld(c.outAv, d, 3.5);
+        wx = pt.wx;
+        wz = pt.wz;
+        rotY = -Math.atan2(-Math.sin(pt.phi), Math.cos(pt.phi));
+      }
+
+      c.car.position.set(wx, 0, wz);
+      c.car.rotation.y = rotY;
+    }
+    if(auto){goal.az+=dt*.06;cur.az+=dt*.06;}
   }
-  for(const c of avCars){
-    const s=(c.s0+c.v*t)%AV_LEN;
-    if(c.lane===0)c.car.position.set(AV_START+s,0,3.5);
-    else c.car.position.set(AV_START+AV_LEN-s,0,-3.5);
-  }
-  if(auto){goal.az+=dt*.06;cur.az+=dt*.06;}
   const k=Math.min(1,dt*5);
   cur.pol+=(goal.pol-cur.pol)*k;
   cur.dist+=(goal.dist-cur.dist)*k;

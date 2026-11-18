@@ -12,10 +12,10 @@ const LIGHT_COLOR: Record<LightState, string> = {
 };
 
 const ZONE_COLORS = [
-  { border: "#3b82f6", bg: "rgba(59, 130, 246, 0.18)", text: "#60a5fa" },
-  { border: "#10b981", bg: "rgba(16, 185, 129, 0.18)", text: "#34d399" },
-  { border: "#f59e0b", bg: "rgba(245, 158, 11, 0.18)", text: "#fbbf24" },
-  { border: "#a855f7", bg: "rgba(168, 85, 247, 0.18)", text: "#c084fc" },
+  { border: "#3b82f6", bg: "rgba(59, 130, 246, 0.08)", text: "#93c5fd" },
+  { border: "#10b981", bg: "rgba(16, 185, 129, 0.08)", text: "#6ee7b7" },
+  { border: "#f59e0b", bg: "rgba(245, 158, 11, 0.08)", text: "#fde68a" },
+  { border: "#a855f7", bg: "rgba(168, 85, 247, 0.08)", text: "#d8b4fe" },
 ];
 
 interface Props {
@@ -118,56 +118,67 @@ export function useInferenceLoop({
       ctx.font = `600 ${Math.round(13 * u)}px Inter, system-ui, sans-serif`;
       ctx.textBaseline = "top";
 
-      // Zonas
+      // Zonas delgadas y transparentes
       (zonesRef.current ?? []).forEach((z, i) => {
         const lightState = lightsRef.current[i] ?? "red";
         const theme = ZONE_COLORS[i % ZONE_COLORS.length];
 
+        // 1. Borde fino de 2px y relleno muy suave para ver el video y los carros debajo
         ctx.fillStyle   = theme.bg;
         ctx.strokeStyle = theme.border;
-        ctx.lineWidth   = 3 * u;
+        ctx.lineWidth   = 2;
         ctx.fillRect  (z.x * W, z.y * H, z.w * W, z.h * H);
         ctx.strokeRect(z.x * W, z.y * H, z.w * W, z.h * H);
 
-        const labelText = `Zona ${i + 1} (${counts[i] ?? 0} veh)`;
-        const tw = ctx.measureText(labelText).width + 12 * u;
-        ctx.fillStyle = "#0f172a";
-        ctx.fillRect(z.x * W, z.y * H, tw, 24 * u);
-        ctx.fillStyle = theme.text;
-        ctx.fillText(labelText, z.x * W + 6 * u, z.y * H + 4 * u);
+        // 2. Letrero chico tipo "Z1 · 0 veh" en la esquina, sin bloques oscuros grandes que tapen la zona
+        const labelText = `Z${i + 1} · ${counts[i] ?? 0} veh`;
+        ctx.font = `600 11px Inter, system-ui, -apple-system, sans-serif`;
+        const tw = ctx.measureText(labelText).width;
+        const tagW = tw + 22;
+        const tagH = 19;
+        const tagX = z.x * W + 3;
+        const tagY = z.y * H + 3;
 
-        // Mini semáforo en canvas
-        const boxX = z.x * W + z.w * W - 28 * u;
-        const boxY = z.y * H + 6 * u;
-        ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
-        if (ctx.roundRect) ctx.roundRect(boxX, boxY, 22 * u, 54 * u, 6 * u);
-        else ctx.fillRect(boxX, boxY, 22 * u, 54 * u);
+        // Fondo discreto y translúcido
+        ctx.fillStyle = "rgba(0, 0, 0, 0.60)";
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(tagX, tagY, tagW, tagH, 4);
+          ctx.fill();
+        } else {
+          ctx.fillRect(tagX, tagY, tagW, tagH);
+        }
+
+        // Borde fino del badge
+        ctx.strokeStyle = theme.border;
+        ctx.lineWidth = 1;
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(tagX, tagY, tagW, tagH, 4);
+          ctx.stroke();
+        }
+
+        // Punto pequeño de estado del semáforo (verde/amarillo/rojo)
+        const lightColor = LIGHT_COLOR[lightState] || "#10b981";
+        ctx.beginPath();
+        ctx.arc(tagX + 8.5, tagY + 9.5, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = lightColor;
         ctx.fill();
 
-        (["red", "yellow", "green"] as LightState[]).forEach((st, idx) => {
-          const cy = boxY + 9 * u + idx * 17 * u;
-          const cx = boxX + 11 * u;
-          ctx.beginPath();
-          ctx.arc(cx, cy, 5.5 * u, 0, Math.PI * 2);
-          if (lightState === st) {
-            ctx.fillStyle   = LIGHT_COLOR[st];
-            ctx.shadowColor = LIGHT_COLOR[st];
-            ctx.shadowBlur  = 10 * u;
-          } else {
-            ctx.fillStyle  = "rgba(255,255,255,0.15)";
-            ctx.shadowBlur = 0;
-          }
-          ctx.fill();
-          ctx.shadowBlur = 0;
-        });
+        // Texto limpio
+        ctx.fillStyle = "#ffffff";
+        ctx.textBaseline = "middle";
+        ctx.fillText(labelText, tagX + 16, tagY + 10);
       });
 
       // Zona borrador (mientras el usuario arrastra)
       const draft = draftRef.current;
       if (draft) {
         ctx.strokeStyle = "#38bdf8";
-        ctx.setLineDash([6 * u, 4 * u]);
-        ctx.lineWidth = 2 * u;
+        ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 2;
+        ctx.fillRect  (draft.x * W, draft.y * H, draft.w * W, draft.h * H);
         ctx.strokeRect(draft.x * W, draft.y * H, draft.w * W, draft.h * H);
         ctx.setLineDash([]);
       }

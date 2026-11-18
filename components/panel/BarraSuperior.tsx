@@ -4,8 +4,8 @@ import Link from "next/link";
 import { Camera, Sun, Sunset, Moon, Pause, Play, Layers, BarChart3 } from "lucide-react";
 import type { ModoVista, ModoDia } from "./tipos";
 
-// Cambia a `true` el dÃ­a de tu presentaciÃ³n para volver a mostrar Inicio 3D, Vista AÃ©rea y Neza
-const ACTIVAR_VISTAS_3D_PRESENTACION = false;
+// Cambia a `true` el día de tu presentación para volver a mostrar Inicio 3D, Vista Aérea y Neza
+const ACTIVAR_VISTAS_3D_PRESENTACION = true;
 
 export interface BarraSuperiorProps {
   modoVista: ModoVista;
@@ -89,7 +89,14 @@ export function BarraSuperior({
               <span className="hidden sm:inline">Vista </span>Aérea
             </button>
             <button
-              onClick={() => alCambiarModoVista(modoVista === "neza" ? "perspective" : "neza")}
+              onClick={() => {
+                if (modoVista === "neza") {
+                  alCambiarModoVista("perspective");
+                } else {
+                  alCambiarModoVista("neza");
+                  alCambiarModoDia("sunset");
+                }
+              }}
               className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0 active:scale-95 ${modoVista === "neza"
                 ? "bg-[#c4501f] text-white shadow-sm ring-2 ring-[#c4501f]/30"
                 : "text-zinc-600 hover:text-zinc-900"
