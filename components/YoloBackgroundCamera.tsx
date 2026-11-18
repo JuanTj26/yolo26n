@@ -156,7 +156,7 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     if (!r) return { x: 0, y: 0 };
     return {
       x: clamp01((clientX - r.left) / r.width),
-      y: clamp01((clientY - r.top)  / r.height),
+      y: clamp01((clientY - r.top) / r.height),
     };
   };
 
@@ -186,22 +186,22 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     const onUp = () => {
       const z = draftRef.current;
       dragStartRef.current = null;
-      draftRef.current    = null;
+      draftRef.current = null;
       setIsDrawing(false);
       if (z && z.w > 0.03 && z.h > 0.03) {
         handleCommitZones([...(zonesRef.current ?? []), z]);
       }
     };
 
-    window.addEventListener("pointermove",   onMove);
-    window.addEventListener("pointerup",     onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
     return () => {
-      window.removeEventListener("pointermove",   onMove);
-      window.removeEventListener("pointerup",     onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDrawing]);
 
   return (
@@ -405,11 +405,10 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
             <button
               onClick={guardarLecturaTiDB}
               disabled={guardandoDB}
-              className={`p-1 rounded text-[10px] font-sans font-bold flex items-center gap-1 transition-all ${
-                guardadoExitoso
+              className={`p-1 rounded text-[10px] font-sans font-bold flex items-center gap-1 transition-all ${guardadoExitoso
                   ? "bg-emerald-600 text-white"
                   : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40"
-              }`}
+                }`}
               title="Guardar una captura de métricas inmediatamente en TiDB"
             >
               {guardadoExitoso ? (
