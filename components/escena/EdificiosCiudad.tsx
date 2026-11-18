@@ -10,6 +10,7 @@ interface DefinicionEdificio {
   w: number;
   d: number;
   h: number;
+  esPabellon?: boolean;
   tieneAntena?: boolean;
   tieneHVAC?: boolean;
   escalon?: { w: number; d: number; h: number };
@@ -26,6 +27,7 @@ for (const sx of [-1, 1]) {
       w: 7.5,
       d: 7.5,
       h: 3.2,
+      esPabellon: true,
       tieneHVAC: true,
     });
     // 2. Torre de avenida exterior Norte/Sur (h=16 m, a distancia >47 m)

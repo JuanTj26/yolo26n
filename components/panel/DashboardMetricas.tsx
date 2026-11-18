@@ -85,33 +85,143 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
     cargarMetricas();
   }, []);
 
-  // EXPORTAR A CSV (Excel)
+  // EXPORTAR A EXCEL CON DISEÑO TECH TI (Colores Negro y Naranja)
   const exportarCSV = () => {
-    if (metricas.length === 0) {
-      alert("No hay datos para exportar.");
+    const datosAExportar = metricasFiltradas.length > 0 ? metricasFiltradas : metricas;
+
+    if (datosAExportar.length === 0) {
+      alert("No hay registros en la tabla para exportar.");
       return;
     }
-    const encabezados = ["ID", "Fecha_Hora", "Camara", "Vehiculos", "Peatones", "En_Espera", "Congestion_Nivel", "Flujo_Porcentaje"];
-    const filas = metricas.map((m) => [
-      m.id,
-      `"${m.fecha_hora}"`,
-      `"${m.camara}"`,
-      m.vehiculos,
-      m.peatones,
-      m.total_espera,
-      `"${m.nivel_congestion}"`,
-      m.flujo_porcentaje,
-    ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [encabezados.join(","), ...filas.map((e) => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
+    const totalVeh = datosAExportar.reduce((acc, m) => acc + (m.vehiculos || 0), 0);
+    const totalPeat = datosAExportar.reduce((acc, m) => acc + (m.peatones || 0), 0);
+    const promFlujo = Math.round(datosAExportar.reduce((acc, m) => acc + (m.flujo_porcentaje || 0), 0) / datosAExportar.length);
+    const fechaGen = new Date().toLocaleString("es-MX");
+
+    const filasHtml = datosAExportar.map((m, idx) => {
+      const bg = idx % 2 === 0 ? "#ffffff" : "#fdf8f6";
+      const badgeCong =
+        m.nivel_congestion === "Alto"
+          ? 'background:#fee2e2;color:#991b1b;'
+          : m.nivel_congestion === "Medio"
+            ? 'background:#fef3c7;color:#92400e;'
+            : 'background:#dcfce7;color:#166534;';
+
+      return `
+        <tr style="background:${bg};border-bottom:1px solid #fed7aa;">
+          <td style="padding:10px;text-align:center;font-weight:bold;color:#431407;">${m.id}</td>
+          <td style="padding:10px;color:#1c1917;">${m.fecha_hora || ""}</td>
+          <td style="padding:10px;text-align:center;font-weight:600;color:#c2410c;">${(m.camara || "general").toUpperCase()}</td>
+          <td style="padding:10px;text-align:center;font-weight:bold;color:#ea580c;font-size:14px;">${m.vehiculos ?? 0}</td>
+          <td style="padding:10px;text-align:center;font-weight:bold;color:#0d9488;">${m.peatones ?? 0}</td>
+          <td style="padding:10px;text-align:center;color:#b91c1c;font-weight:600;">${m.total_espera ?? 0}</td>
+          <td style="padding:10px;text-align:center;"><span style="padding:4px 10px;border-radius:12px;font-weight:bold;font-size:11px;${badgeCong}">${m.nivel_congestion || "Bajo"}</span></td>
+          <td style="padding:10px;text-align:center;font-weight:bold;color:#ea580c;">${m.flujo_porcentaje ?? 0}%</td>
+          <td style="padding:10px;text-align:center;color:#57534e;">${m.fps_promedio ?? 0}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const excelHtml = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+          <!--[if gte mso 9]>
+          <xml>
+            <x:ExcelWorkbook>
+              <x:ExcelWorksheets>
+                <x:ExcelWorksheet>
+                  <x:Name>TECH TI Reporte</x:Name>
+                  <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+                </x:ExcelWorksheet>
+              </x:ExcelWorksheets>
+            </x:ExcelWorkbook>
+          </xml>
+          <![endif]-->
+          <style>
+            body { font-family: 'Segoe UI', Arial, sans-serif; }
+          </style>
+        </head>
+        <body style="background:#ffffff;padding:20px;">
+          <!-- BANNER SUPERIOR TECH TI -->
+          <table style="width:100%;border-collapse:collapse;margin-bottom:15px;">
+            <tr>
+              <td colspan="9" style="background:#0f172a;color:#ffffff;padding:18px 20px;border-bottom:4px solid #f95721;">
+                <div style="font-size:26px;font-weight:900;letter-spacing:1px;color:#ffffff;">
+                  TECH TI <span style="color:#f95721;">· SMART TRAFFIC AI</span>
+                </div>
+                <div style="font-size:13px;color:#cbd5e1;margin-top:4px;">
+                  INFORME OFICIAL DE AFORO VEHICULAR Y MONITOREO DE TRÁFICO EN TIEMPO REAL
+                </div>
+              </td>
+            </tr>
+            <tr style="background:#fff7ed;">
+              <td colspan="5" style="padding:10px 15px;color:#7c2d12;font-size:12px;font-weight:600;">
+                Fecha de Emisión: <strong>${fechaGen}</strong>
+              </td>
+              <td colspan="4" style="padding:10px 15px;text-align:right;color:#c2410c;font-size:12px;font-weight:bold;">
+                Registros Analizados: ${datosAExportar.length}
+              </td>
+            </tr>
+          </table>
+
+          <!-- RESUMEN DE KPIS -->
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+            <tr>
+              <td colspan="3" style="background:#ffedd5;border:2px solid #fdba74;padding:12px;text-align:center;">
+                <div style="font-size:11px;color:#9a3412;font-weight:bold;text-transform:uppercase;">Total Vehículos Contabilizados</div>
+                <div style="font-size:24px;font-weight:900;color:#c2410c;margin-top:2px;">${totalVeh.toLocaleString()}</div>
+              </td>
+              <td colspan="3" style="background:#f0fdfa;border:2px solid #99f6e4;padding:12px;text-align:center;">
+                <div style="font-size:11px;color:#115e59;font-weight:bold;text-transform:uppercase;">Total Peatones Detectados</div>
+                <div style="font-size:24px;font-weight:900;color:#0d9488;margin-top:2px;">${totalPeat.toLocaleString()}</div>
+              </td>
+              <td colspan="3" style="background:#0f172a;border:2px solid #334155;padding:12px;text-align:center;">
+                <div style="font-size:11px;color:#f95721;font-weight:bold;text-transform:uppercase;">Flujo Promedio</div>
+                <div style="font-size:24px;font-weight:900;color:#ffffff;margin-top:2px;">${promFlujo}%</div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- TABLA PRINCIPAL DE DATOS -->
+          <table style="width:100%;border-collapse:collapse;border:1px solid #fed7aa;font-size:12px;">
+            <thead>
+              <tr style="background:#f95721;color:#ffffff;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">
+                <th style="padding:12px 10px;text-align:center;border:1px solid #ea580c;">ID</th>
+                <th style="padding:12px 10px;text-align:left;border:1px solid #ea580c;">Fecha y Hora</th>
+                <th style="padding:12px 10px;text-align:center;border:1px solid #ea580c;">Cámara / Modo</th>
+                <th style="padding:12px 10px;text-align:center;border:1px solid #ea580c;">Vehículos</th>
+                <th style="padding:12px 10px;text-align:center;border:1px solid #ea580c;">Peatones</th>
+                <th style="padding:12px 10px;text-align:center;border:1px solid #ea580c;">En Espera</th>
+                <th style="padding:12px 10px;text-align:center;border:1px solid #ea580c;">Congestión</th>
+                <th style="padding:12px 10px;text-align:center;border:1px solid #ea580c;">Flujo %</th>
+                <th style="padding:12px 10px;text-align:center;border:1px solid #ea580c;">FPS Promedio</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filasHtml}
+            </tbody>
+          </table>
+
+          <div style="margin-top:15px;font-size:11px;color:#78716c;text-align:right;">
+            TECH TI · Sistema de Control Inteligente de Tráfico Urbano e Inteligencia Artificial
+          </div>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([excelHtml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `reporte_trafico_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.href = url;
+    link.setAttribute("download", `TECH_TI_Informe_Trafico_${new Date().toISOString().slice(0, 10)}.xls`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    mostrarExito("Reporte CSV descargado correctamente");
+    URL.revokeObjectURL(url);
+
+    mostrarExito(`Informe Excel TECH TI exportado (${datosAExportar.length} registros)`);
   };
 
   // ABRIR MODAL
@@ -256,8 +366,25 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
 
   return (
     <div className="fixed inset-0 z-40 bg-[#f8fafc]/95 text-zinc-900 backdrop-blur-xl overflow-y-auto p-4 sm:p-8 pt-20 sm:pt-24 animate-in fade-in duration-200">
-      <div className="max-w-6xl mx-auto space-y-6">
-        
+
+      {/* ── Marca de fondo TECH TI en esquina superior derecha ── */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed top-4 sm:top-2 right-4 sm:right-10 z-0 select-none overflow-hidden text-right"
+      >
+        <span
+          className="block text-[clamp(6rem,18vw,16rem)] font-black uppercase leading-none tracking-tight text-black/[0.08] select-none"
+          style={{
+            fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+            userSelect: "none",
+          }}
+        >
+          TECH TI
+        </span>
+      </div>
+
+      <div className="max-w-6xl mx-auto space-y-6 relative z-10">
+
         {/* Cabecera Limpia */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-zinc-200/60">
           <div>
@@ -265,7 +392,7 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
               Métricas de Aforo y Tráfico
             </h1>
             <p className="text-xs sm:text-sm text-zinc-500 mt-1">
-              Registro histórico y monitoreo de afluencia vehicular y peatonal.
+              Registro histórico y monitoreo oficial de afluencia vehicular y peatonal · TECH TI Cloud.
             </p>
           </div>
 
@@ -287,9 +414,9 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
             <button
               onClick={exportarCSV}
               className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-xs font-semibold text-zinc-700 border border-zinc-200/80 shadow-sm transition active:scale-95 hover:bg-zinc-50"
-              title="Descargar datos en formato CSV para Excel"
+              title="Descargar informe formateado TECH TI en Excel"
             >
-              <Download className="h-3.5 w-3.5 text-zinc-600" /> Exportar CSV
+              <Download className="h-3.5 w-3.5 text-[#f95721]" /> Exportar Excel
             </button>
             <button
               onClick={cargarMetricas}
@@ -321,7 +448,7 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
 
         {/* Tarjetas KPI con Desvanecido Estilo Pintura de Acuarela */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          
+
           {/* KPI 1: Vehículos */}
           <div className="relative overflow-hidden rounded-2xl border border-orange-200/50 bg-white p-4 sm:p-5 shadow-sm">
             <div className="absolute -top-10 -right-10 w-36 h-36 bg-gradient-to-br from-[#f95721]/30 via-orange-300/20 to-transparent rounded-[40%_60%_70%_30%] blur-2xl pointer-events-none" />
@@ -460,7 +587,7 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
 
         {/* 🎛️ FILTROS Y TABLA CRUD */}
         <div className="bg-white border border-zinc-200/80 rounded-2xl shadow-sm overflow-hidden">
-          
+
           {/* Barra de Filtros */}
           <div className="p-4 sm:p-5 border-b border-zinc-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -561,14 +688,14 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
                           return isNaN(fecha.getTime())
                             ? m.fecha_hora
                             : fecha.toLocaleString("es-MX", {
-                                timeZone: "America/Mexico_City",
-                                day: "2-digit",
-                                month: "short",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                second: "2-digit",
-                                hour12: true,
-                              });
+                              timeZone: "America/Mexico_City",
+                              day: "2-digit",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                              hour12: true,
+                            });
                         })()}
                       </td>
                       <td className="py-3 px-3 sm:px-4">
@@ -581,23 +708,21 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
                       <td className="py-3 px-3 sm:px-4 text-zinc-600">{m.total_espera}</td>
                       <td className="py-3 px-3 sm:px-4">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                            m.nivel_congestion === "Alto"
-                              ? "bg-red-50 text-red-600 border border-red-200"
-                              : m.nivel_congestion === "Medio"
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${m.nivel_congestion === "Alto"
+                            ? "bg-red-50 text-red-600 border border-red-200"
+                            : m.nivel_congestion === "Medio"
                               ? "bg-amber-50 text-amber-700 border border-amber-200"
                               : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          }`}
+                            }`}
                         >
                           {/* Status Dot Pulsante */}
                           <span
-                            className={`w-1.5 h-1.5 rounded-full animate-pulse ${
-                              m.nivel_congestion === "Alto"
-                                ? "bg-red-500"
-                                : m.nivel_congestion === "Medio"
+                            className={`w-1.5 h-1.5 rounded-full animate-pulse ${m.nivel_congestion === "Alto"
+                              ? "bg-red-500"
+                              : m.nivel_congestion === "Medio"
                                 ? "bg-amber-500"
                                 : "bg-emerald-500"
-                            }`}
+                              }`}
                           />
                           {m.flujo_porcentaje}% ({m.nivel_congestion})
                         </span>

@@ -30,8 +30,34 @@ function useTexturaCarretera() {
   }, []);
 }
 
+function useTexturaBrandingAsfalto() {
+  return useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 1024;
+    c.height = 256;
+    const g = c.getContext("2d")!;
+    g.clearRect(0, 0, 1024, 256);
+
+    // Tipografía vial nítida y visible
+    g.font = "900 130px Inter, system-ui, -apple-system, sans-serif";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+
+    // Relleno negro puro estilo asfalto marcado
+    g.fillStyle = "rgba(15, 17, 23, 0.85)";
+    g.fillText("TECH TI", 512, 128);
+
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 8;
+    return t;
+  }, []);
+}
+
 export default function RedVial() {
   const tex = useTexturaCarretera();
+  const texBranding = useTexturaBrandingAsfalto();
 
   // Rayas peatonales tipo cebra centradas en ±6.4
   const rayasCebra = useMemo(() => {
@@ -123,6 +149,35 @@ export default function RedVial() {
           <meshBasicMaterial color="#ffffff" />
         </mesh>
       ))}
+
+      {/* ── Branding TECH TI pintado sobre el asfalto 3D en las 4 avenidas ── */}
+      {texBranding && (
+        <>
+          {/* Avenida Sur */}
+          <mesh rotation-x={-Math.PI / 2} position={[0, 0.094, 15]}>
+            <planeGeometry args={[8.5, 2.1]} />
+            <meshBasicMaterial map={texBranding} transparent opacity={0.85} depthWrite={false} />
+          </mesh>
+
+          {/* Avenida Norte */}
+          <mesh rotation-x={-Math.PI / 2} rotation-z={Math.PI} position={[0, 0.094, -15]}>
+            <planeGeometry args={[8.5, 2.1]} />
+            <meshBasicMaterial map={texBranding} transparent opacity={0.85} depthWrite={false} />
+          </mesh>
+
+          {/* Avenida Este */}
+          <mesh rotation-x={-Math.PI / 2} rotation-z={-Math.PI / 2} position={[15, 0.094, 0]}>
+            <planeGeometry args={[8.5, 2.1]} />
+            <meshBasicMaterial map={texBranding} transparent opacity={0.85} depthWrite={false} />
+          </mesh>
+
+          {/* Avenida Oeste */}
+          <mesh rotation-x={-Math.PI / 2} rotation-z={Math.PI / 2} position={[-15, 0.094, 0]}>
+            <planeGeometry args={[8.5, 2.1]} />
+            <meshBasicMaterial map={texBranding} transparent opacity={0.85} depthWrite={false} />
+          </mesh>
+        </>
+      )}
     </group>
   );
 }

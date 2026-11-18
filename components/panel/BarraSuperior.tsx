@@ -61,7 +61,7 @@ export function BarraSuperior({
             </svg>
           </div>
           <span className="text-lg sm:text-xl font-bold tracking-tight text-zinc-900 font-display">
-            Tráfico
+            TECH TI
           </span>
         </Link>
       </div>
