@@ -621,8 +621,6 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
               >
                 <option value="todas">Todas las cámaras</option>
                 <option value="general">General</option>
-                <option value="dual">Dual</option>
-                <option value="maqueta">Maqueta</option>
                 <option value="toycars">ToyCars</option>
               </select>
 
@@ -781,8 +779,6 @@ export function DashboardMetricas({ onVolver }: DashboardMetricasProps) {
                   className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-zinc-900 outline-none focus:border-[#f95721] transition"
                 >
                   <option value="general">General (COCO)</option>
-                  <option value="dual">Dual (Carritos + Personas)</option>
-                  <option value="maqueta">Maqueta (best.onnx)</option>
                   <option value="toycars">ToyCars (toycars.onnx)</option>
                 </select>
               </div>

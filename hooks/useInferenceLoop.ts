@@ -12,10 +12,10 @@ const LIGHT_COLOR: Record<LightState, string> = {
 };
 
 const ZONE_COLORS = [
-  { border: "#3b82f6", bg: "rgba(59, 130, 246, 0.08)", text: "#93c5fd" },
-  { border: "#10b981", bg: "rgba(16, 185, 129, 0.08)", text: "#6ee7b7" },
-  { border: "#f59e0b", bg: "rgba(245, 158, 11, 0.08)", text: "#fde68a" },
-  { border: "#a855f7", bg: "rgba(168, 85, 247, 0.08)", text: "#d8b4fe" },
+  { border: "#3b82f6", bg: "transparent", text: "#93c5fd" },
+  { border: "#10b981", bg: "transparent", text: "#6ee7b7" },
+  { border: "#f59e0b", bg: "transparent", text: "#fde68a" },
+  { border: "#a855f7", bg: "transparent", text: "#d8b4fe" },
 ];
 
 interface Props {
@@ -123,11 +123,9 @@ export function useInferenceLoop({
         const lightState = lightsRef.current[i] ?? "red";
         const theme = ZONE_COLORS[i % ZONE_COLORS.length];
 
-        // 1. Borde fino de 2px y relleno muy suave para ver el video y los carros debajo
-        ctx.fillStyle   = theme.bg;
+        // 1. Solo contorno fino (1px) y 100% transparente adentro (sin pintar el fondo)
         ctx.strokeStyle = theme.border;
-        ctx.lineWidth   = 2;
-        ctx.fillRect  (z.x * W, z.y * H, z.w * W, z.h * H);
+        ctx.lineWidth   = 1;
         ctx.strokeRect(z.x * W, z.y * H, z.w * W, z.h * H);
 
         // 2. Letrero chico tipo "Z1 · 0 veh" en la esquina, sin bloques oscuros grandes que tapen la zona
@@ -171,14 +169,12 @@ export function useInferenceLoop({
         ctx.fillText(labelText, tagX + 16, tagY + 10);
       });
 
-      // Zona borrador (mientras el usuario arrastra)
+      // Zona borrador (mientras el usuario arrastra) - solo contorno fino transparente
       const draft = draftRef.current;
       if (draft) {
         ctx.strokeStyle = "#38bdf8";
-        ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
         ctx.setLineDash([4, 4]);
-        ctx.lineWidth = 2;
-        ctx.fillRect  (draft.x * W, draft.y * H, draft.w * W, draft.h * H);
+        ctx.lineWidth = 1;
         ctx.strokeRect(draft.x * W, draft.y * H, draft.w * W, draft.h * H);
         ctx.setLineDash([]);
       }

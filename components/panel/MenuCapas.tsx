@@ -107,13 +107,13 @@ export const MenuCapas: React.FC<MenuCapasProps> = ({
       <div className="mt-4 pt-2.5 border-t border-zinc-100 flex flex-col gap-1.5">
         <button
           onClick={() => {
-            alCambiarModoVista("camera_maqueta");
+            alCambiarModoVista("camera");
             alCerrar();
           }}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors"
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-semibold transition-colors"
         >
           <Scan className="h-3 w-3" />
-          <span>Cámara Maqueta (best.onnx)</span>
+          <span>Cámara General (COCO: Carros, Personas)</span>
         </button>
         <button
           onClick={() => {
@@ -124,16 +124,6 @@ export const MenuCapas: React.FC<MenuCapasProps> = ({
         >
           <Scan className="h-3 w-3" />
           <span>Cámara ToyCars (toycars.onnx)</span>
-        </button>
-        <button
-          onClick={() => {
-            alCambiarModoVista("camera");
-            alCerrar();
-          }}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-semibold transition-colors"
-        >
-          <Scan className="h-3 w-3" />
-          <span>Cámara Dual (Carritos + Personas)</span>
         </button>
       </div>
     </div>
