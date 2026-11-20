@@ -6,7 +6,7 @@ import { useVideoSource } from "@/hooks/useVideoSource";
 import { useInferenceLoop } from "@/hooks/useInferenceLoop";
 import { useMqttSemaforos } from "@/hooks/useMqttSemaforos";
 import type { Zone } from "@/lib/types";
-import { Camera, Upload, Trash2, Video, RotateCw, Database, Check, Footprints, Clock, Lock } from "lucide-react";
+import { Camera, Upload, Trash2, Video, RotateCw, Database, Check, Footprints, Clock, Lock, GripVertical, ChevronDown, ChevronUp } from "lucide-react";
 import { type PedestrianState, type SolicitudPeatonal, STORAGE_KEY_SOLICITUDES } from "@/lib/pedestrianTypes";
 
 // ── Parámetros de Cruce Peatonal ──
@@ -34,6 +34,45 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
   const [zones, setZones] = useState<Zone[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
   const [rotacion, setRotacion] = useState<0 | 90 | 180 | 270>(0);
+
+  // Posicion del panel flotante de peatones (arrastrable)
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number }>({ x: 20, y: 75 });
+  const [panelDragging, setPanelDragging] = useState(false);
+  const [panelColapsado, setPanelColapsado] = useState(false);
+  const dragPanelOffsetRef = useRef<{ offsetX: number; offsetY: number }>({ offsetX: 0, offsetY: 0 });
+
+  const onStartDragPanel = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragPanelOffsetRef.current = {
+      offsetX: e.clientX - panelPos.x,
+      offsetY: e.clientY - panelPos.y,
+    };
+    setPanelDragging(true);
+  };
+
+  useEffect(() => {
+    if (!panelDragging) return;
+
+    const onPanelMove = (e: PointerEvent) => {
+      const maxX = Math.max(10, window.innerWidth - 300);
+      const maxY = Math.max(10, window.innerHeight - 100);
+      const newX = Math.max(10, Math.min(maxX, e.clientX - dragPanelOffsetRef.current.offsetX));
+      const newY = Math.max(10, Math.min(maxY, e.clientY - dragPanelOffsetRef.current.offsetY));
+      setPanelPos({ x: newX, y: newY });
+    };
+
+    const onPanelUp = () => {
+      setPanelDragging(false);
+    };
+
+    window.addEventListener("pointermove", onPanelMove);
+    window.addEventListener("pointerup", onPanelUp);
+    return () => {
+      window.removeEventListener("pointermove", onPanelMove);
+      window.removeEventListener("pointerup", onPanelUp);
+    };
+  }, [panelDragging]);
 
   // 1. Exact detector hook with dynamic mode support
   const { detectorRef, modelStatus, backend, setBackend, modelMode, setModelMode } =
@@ -391,6 +430,38 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     }
   };
 
+  // Eliminar una zona individualmente sin borrar las demas
+  const eliminarZonaIndividual = (zonaIdx: number) => {
+    const nextZones = zones.filter((_, idx) => idx !== zonaIdx);
+    setZonasPeatonal((prev) => {
+      const next = prev.filter((_, idx) => idx !== zonaIdx);
+      while (next.length < 4) {
+        next.push({ estado: "normal", cuenta: 0 });
+      }
+      return next;
+    });
+    handleCommitZones(nextZones);
+  };
+
+  // Reordenar / intercambiar numero de zona entre las zonas dibujadas
+  const reordenarZona = (origenIdx: number, destinoIdx: number) => {
+    if (origenIdx === destinoIdx || destinoIdx < 0 || destinoIdx >= zones.length) return;
+    const nextZones = [...zones];
+    const temp = nextZones[origenIdx];
+    nextZones[origenIdx] = nextZones[destinoIdx];
+    nextZones[destinoIdx] = temp;
+
+    setZonasPeatonal((prev) => {
+      const next = [...prev];
+      const tempP = next[origenIdx];
+      next[origenIdx] = next[destinoIdx];
+      next[destinoIdx] = tempP;
+      return next;
+    });
+
+    handleCommitZones(nextZones);
+  };
+
   // Convierte coordenadas de cliente a normalizadas [0,1] usando el canvas como referencia
   const toNorm = (clientX: number, clientY: number) => {
     const r = canvasRef.current?.getBoundingClientRect();
@@ -479,130 +550,199 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
         onPointerDown={onPointerDown}
       />
 
-      {/* ── Panel Flotante de Cruce Peatonal por Zona (SOLO cuando el usuario dibuja rectángulos) ── */}
+      {/* ── Panel Flotante de Cruce Peatonal por Zona (Arrastrable por el usuario) ── */}
       {zones.length > 0 && (
         <div
-          className={`fixed top-16 sm:top-20 left-3 sm:left-6 z-40 flex flex-col gap-2 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 p-3 sm:p-3.5 rounded-2xl shadow-xl w-[275px] sm:w-[310px] text-white pointer-events-auto transition-opacity duration-150 ${isDrawing ? "opacity-0 pointer-events-none" : "opacity-100"
-            }`}
+          style={{
+            left: `${panelPos.x}px`,
+            top: `${panelPos.y}px`,
+          }}
+          className={`fixed z-40 flex flex-col gap-2 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 p-3 sm:p-3.5 rounded-2xl shadow-2xl w-[285px] sm:w-[315px] text-white pointer-events-auto transition-opacity duration-150 ${
+            isDrawing ? "opacity-0 pointer-events-none" : "opacity-100"
+          }`}
         >
-          {/* Cabecera */}
-          <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-zinc-700/50">
+          {/* Cabecera con Grip para arrastrar y botón para colapsar */}
+          <div
+            onPointerDown={onStartDragPanel}
+            className="flex items-center justify-between gap-2 pb-1.5 border-b border-zinc-700/50 cursor-grab active:cursor-grabbing select-none"
+            title="Arrastra desde aquí para mover el panel"
+          >
             <div className="flex items-center gap-1.5">
+              <GripVertical className="h-4 w-4 text-zinc-500 flex-shrink-0" />
               <Footprints className="h-4 w-4 text-[#c94c1a]" />
               <span className="text-xs font-bold font-sans tracking-tight text-zinc-100">Cruce Peatonal</span>
             </div>
-            <span className="text-[10px] text-zinc-500 font-mono bg-zinc-800 px-2 py-0.5 rounded-full border border-zinc-700">
-              {TIEMPO_CRUCE_FIJO_S}s · {COOLDOWN_CRUCE_S}s espera
-            </span>
-          </div>
-
-          {/* Lista de botones: EXACTAMENTE los rectángulos dibujados por el usuario */}
-          <div className="flex flex-col gap-1.5 mt-1">
-            {zones.map((_, i) => {
-              const info = zonasPeatonal[i] ?? { estado: "normal", cuenta: 0 };
-              const estado = info.estado;
-              const cuenta = info.cuenta;
-              const luz = lights[i] ?? (i === 0 ? "green" : "red");
-
-              // Dots de zona: tonos apagados slate/stone, no neón
-              const colorZona = ["#64748b", "#6b7280", "#78716c", "#71717a"][i % 4];
-
-              // Color del indicador de semáforo: apagado, no brillante
-              const luzColor =
-                luz === "green" ? "#4ade80" : luz === "yellow" ? "#ca8a04" : "#b45252";
-              const luzLabel =
-                luz === "green" ? "● Verde" : luz === "yellow" ? "● Amarillo" : "● Rojo";
-
-              // Si otra zona ya está solicitada o cruzando, deshabilitar temporalmente este botón
-              const otraZonaActiva = zonasPeatonal.some(
-                (z, idx) => idx !== i && idx < zones.length && (z.estado === "solicitado" || z.estado === "cruzando")
-              );
-
-              return (
-                <div
-                  key={i}
-                  className="flex items-center justify-between gap-1.5 bg-zinc-800/60 hover:bg-zinc-800 p-2 rounded-xl border border-zinc-700/40 transition"
-                >
-                  {/* Info de zona */}
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span
-                      className="w-2 h-2 rounded-full flex-shrink-0 opacity-80"
-                      style={{ background: colorZona }}
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-xs font-semibold font-sans leading-none text-zinc-200">Zona {i + 1}</span>
-                      <span className="text-[9px] font-mono mt-0.5" style={{ color: luzColor }}>
-                        {luzLabel}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Botón interactivo con sus 4 estados */}
-                  {estado === "normal" && (
-                    <button
-                      type="button"
-                      disabled={otraZonaActiva}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        if (!otraZonaActiva) pedirCruce(i);
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!otraZonaActiva) pedirCruce(i);
-                      }}
-                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${otraZonaActiva
-                          ? "bg-zinc-700/50 text-zinc-500 cursor-not-allowed border border-zinc-600/30"
-                          : "bg-[#c94c1a] hover:bg-[#b84418] active:scale-95 text-white cursor-pointer shadow-sm"
-                        }`}
-                      title={
-                        otraZonaActiva
-                          ? "Espera a que termine el cruce activo en otra zona"
-                          : `Solicitar paso peatonal en Zona ${i + 1}`
-                      }
-                    >
-                      <Footprints className="h-3 w-3" />
-                      <span>{otraZonaActiva ? "En espera" : "Pedir Cruce"}</span>
-                    </button>
-                  )}
-
-                  {estado === "solicitado" && (
-                    <div
-                      className="px-2.5 py-1.5 rounded-lg bg-yellow-900/40 border border-yellow-700/50 text-yellow-400/90 text-[11px] font-semibold flex items-center gap-1 animate-pulse"
-                      title="Esperando que el semáforo vehicular pase a rojo"
-                    >
-                      <Clock className="h-3 w-3" />
-                      <span>Solicitado...</span>
-                    </div>
-                  )}
-
-                  {estado === "cruzando" && (
-                    <div
-                      className="px-2.5 py-1.5 rounded-lg bg-emerald-900/60 border border-emerald-700/50 text-emerald-300 text-[11px] font-bold flex items-center gap-1.5"
-                      title="Paso peatonal activo. LED blanco encendido en ESP32."
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                      <span>Cruzar ({cuenta}s)</span>
-                    </div>
-                  )}
-
-                  {estado === "bloqueado" && (
-                    <div
-                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-500 text-[11px] font-medium flex items-center gap-1 border border-zinc-700/40"
-                      title="Tiempo de espera preventivo antes de permitir otro cruce"
-                    >
-                      <Lock className="h-3 w-3" />
-                      <span>Espera ({cuenta}s)</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {notificacionPeatonal && (
-            <div className="mt-1 p-2 rounded-xl bg-zinc-800 border border-zinc-600/40 text-[11px] text-zinc-300 leading-snug">
-              {notificacionPeatonal}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-zinc-500 font-mono bg-zinc-800 px-2 py-0.5 rounded-full border border-zinc-700">
+                {TIEMPO_CRUCE_FIJO_S}s · {COOLDOWN_CRUCE_S}s
+              </span>
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPanelColapsado(!panelColapsado);
+                }}
+                className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition cursor-pointer"
+                title={panelColapsado ? "Expandir panel" : "Minimizar panel"}
+              >
+                {panelColapsado ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+              </button>
             </div>
+          </div>
+
+          {!panelColapsado && (
+            <>
+              {/* Lista de botones: EXACTAMENTE los rectángulos dibujados por el usuario */}
+              <div className="flex flex-col gap-1.5 mt-1">
+                {zones.map((_, i) => {
+                  const info = zonasPeatonal[i] ?? { estado: "normal", cuenta: 0 };
+                  const estado = info.estado;
+                  const cuenta = info.cuenta;
+                  const luz = lights[i] ?? (i === 0 ? "green" : "red");
+
+                  // Dots de zona: tonos apagados slate/stone, no neón
+                  const colorZona = ["#64748b", "#6b7280", "#78716c", "#71717a"][i % 4];
+
+                  // Color del indicador de semáforo: apagado, no brillante
+                  const luzColor =
+                    luz === "green" ? "#4ade80" : luz === "yellow" ? "#ca8a04" : "#b45252";
+                  const luzLabel =
+                    luz === "green" ? "● Verde" : luz === "yellow" ? "● Amarillo" : "● Rojo";
+
+                  // Si otra zona ya está solicitada o cruzando, deshabilitar temporalmente este botón
+                  const otraZonaActiva = zonasPeatonal.some(
+                    (z, idx) => idx !== i && idx < zones.length && (z.estado === "solicitado" || z.estado === "cruzando")
+                  );
+
+                  return (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between gap-1.5 bg-zinc-800/60 hover:bg-zinc-800 p-2 rounded-xl border border-zinc-700/40 transition"
+                    >
+                      {/* Info de zona */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0 opacity-80"
+                          style={{ background: colorZona }}
+                        />
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1">
+                            {zones.length > 1 ? (
+                              <select
+                                value={i}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  reordenarZona(i, Number(e.target.value));
+                                }}
+                                className="bg-zinc-800 text-zinc-200 text-[11px] font-semibold rounded px-1.5 py-0.5 border border-zinc-700/60 outline-none cursor-pointer hover:border-zinc-500 pointer-events-auto"
+                                title="Cambiar número / orden de esta zona"
+                              >
+                                {zones.map((_, idx) => (
+                                  <option key={idx} value={idx}>
+                                    Zona {idx + 1}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-xs font-semibold font-sans leading-none text-zinc-200">
+                                Zona {i + 1}
+                              </span>
+                            )}
+
+                            {/* Botón para eliminar solo esta zona */}
+                            <button
+                              type="button"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                eliminarZonaIndividual(i);
+                              }}
+                              className="p-1 rounded text-zinc-400 hover:text-red-400 hover:bg-zinc-700/60 transition cursor-pointer pointer-events-auto"
+                              title={`Eliminar solo Zona ${i + 1}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          <span className="text-[9px] font-mono mt-0.5" style={{ color: luzColor }}>
+                            {luzLabel}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Botón interactivo con sus 4 estados */}
+                      {estado === "normal" && (
+                        <button
+                          type="button"
+                          disabled={otraZonaActiva}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            if (!otraZonaActiva) pedirCruce(i);
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!otraZonaActiva) pedirCruce(i);
+                          }}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${
+                            otraZonaActiva
+                              ? "bg-zinc-700/50 text-zinc-500 cursor-not-allowed border border-zinc-600/30"
+                              : "bg-[#c94c1a] hover:bg-[#b84418] active:scale-95 text-white cursor-pointer shadow-sm"
+                          }`}
+                          title={
+                            otraZonaActiva
+                              ? "Espera a que termine el cruce activo en otra zona"
+                              : `Solicitar paso peatonal en Zona ${i + 1}`
+                          }
+                        >
+                          <Footprints className="h-3 w-3" />
+                          <span>{otraZonaActiva ? "En espera" : "Pedir Cruce"}</span>
+                        </button>
+                      )}
+
+                      {estado === "solicitado" && (
+                        <div
+                          className="px-2.5 py-1.5 rounded-lg bg-yellow-900/40 border border-yellow-700/50 text-yellow-400/90 text-[11px] font-semibold flex items-center gap-1 animate-pulse"
+                          title="Esperando que el semáforo vehicular pase a rojo"
+                        >
+                          <Clock className="h-3 w-3" />
+                          <span>Solicitado...</span>
+                        </div>
+                      )}
+
+                      {estado === "cruzando" && (
+                        <div
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-900/60 border border-emerald-700/50 text-emerald-300 text-[11px] font-bold flex items-center gap-1.5"
+                          title="Paso peatonal activo. LED blanco encendido en ESP32."
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                          <span>Cruzar ({cuenta}s)</span>
+                        </div>
+                      )}
+
+                      {estado === "bloqueado" && (
+                        <div
+                          className="px-2.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-500 text-[11px] font-medium flex items-center gap-1 border border-zinc-700/40"
+                          title="Tiempo de espera preventivo antes de permitir otro cruce"
+                        >
+                          <Lock className="h-3 w-3" />
+                          <span>Espera ({cuenta}s)</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {notificacionPeatonal && (
+                <div className="mt-1 p-2 rounded-xl bg-zinc-800 border border-zinc-600/40 text-[11px] text-zinc-300 leading-snug">
+                  {notificacionPeatonal}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
