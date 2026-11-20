@@ -213,7 +213,7 @@ export class TrafficController {
     }
 
     return Array.from({ length: this.zones }, (_, i): LightState =>
-      i === this.current ? this.phase : "red"
+      i === this.current ? (this.phase as LightState) : "red"
     );
   }
 }
