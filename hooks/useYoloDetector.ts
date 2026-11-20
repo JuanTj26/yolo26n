@@ -26,6 +26,7 @@ export function useYoloDetector(initialMode: DetectorMode = "general") {
         } else {
           detector = await YoloDetector.create("/models/yolo26n_webgpu.onnx", {
             inputSize: 320,
+            confThreshold: 0.25,
           });
         }
 

@@ -240,10 +240,14 @@ export class YoloDetector {
     return new YoloDetector(ort, session, "WASM (CPU)", modelUrl, opts);
   }
 
-  async detect(video: HTMLVideoElement): Promise<Detection[]> {
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-    if (!vw || !vh) return [];
+  async detect(video: HTMLVideoElement, rotacion: 0 | 90 | 180 | 270 = 0): Promise<Detection[]> {
+    const rawVw = video.videoWidth;
+    const rawVh = video.videoHeight;
+    if (!rawVw || !rawVh) return [];
+
+    const isRot = rotacion === 90 || rotacion === 270;
+    const vw = isRot ? rawVh : rawVw;
+    const vh = isRot ? rawVw : rawVh;
 
     const IS = this.inputSize;
     const scale = Math.min(IS / vw, IS / vh);
@@ -256,7 +260,19 @@ export class YoloDetector {
     this.ctx.fillRect(0, 0, IS, IS);
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.imageSmoothingQuality = "high";
-    this.ctx.drawImage(video, padX, padY, nw, nh);
+
+    if (rotacion === 0) {
+      this.ctx.drawImage(video, padX, padY, nw, nh);
+    } else {
+      this.ctx.save();
+      this.ctx.translate(IS / 2, IS / 2);
+      this.ctx.rotate((rotacion * Math.PI) / 180);
+      const rawScale = Math.min(IS / rawVw, IS / rawVh);
+      const rawNw = Math.round(rawVw * rawScale);
+      const rawNh = Math.round(rawVh * rawScale);
+      this.ctx.drawImage(video, -rawNw / 2, -rawNh / 2, rawNw, rawNh);
+      this.ctx.restore();
+    }
 
     const { data } = this.ctx.getImageData(0, 0, IS, IS);
     const plane = IS * IS;
@@ -340,8 +356,8 @@ export class YoloDetector {
     const anchors = chFirst ? b : a;
     const numClasses = channels - 4;
 
-    const maxSide = IS * 0.70;
-    const maxArea = IS * IS * 0.40;
+    const maxSide = IS * 0.90;
+    const maxArea = IS * IS * 0.75;
 
     if (chFirst) {
       const stride = anchors;
@@ -475,10 +491,10 @@ export class DualYoloDetector {
         : `${toyCar.backend} + ${general.backend}`;
   }
 
-  async detect(video: HTMLVideoElement): Promise<Detection[]> {
+  async detect(video: HTMLVideoElement, rotacion: 0 | 90 | 180 | 270 = 0): Promise<Detection[]> {
     // Inferencia secuencial para evitar contención de GPU
-    const toyDets = await this.detectorToyCar.detect(video);
-    const generalDets = await this.detectorGeneral.detect(video);
+    const toyDets = await this.detectorToyCar.detect(video, rotacion);
+    const generalDets = await this.detectorGeneral.detect(video, rotacion);
 
     // Conservar personas del modelo general (classId === 0)
     // Descartar cualquier otra detección de COCO que se solape con toy-car
@@ -549,7 +565,7 @@ export class DualYoloDetector {
     return await YoloDetector.create(urlToyCars, {
       classLabels: { 0: "toy-car" },
       defaultColor: "#06b6d4", // Cyan brillante distintivo para el modelo toycars
-      confThreshold: 0.35,
+      confThreshold: 0.25, // Excelente sensibilidad para horizontal y vertical
       iouThreshold: 0.35,
       isToyCarModel: true,
       inputSize: 640,

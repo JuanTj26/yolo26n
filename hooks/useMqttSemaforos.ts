@@ -49,8 +49,18 @@ export function useMqttSemaforos() {
   }, []);
 
   // states: e.g. ["G","R","R","R"]  G=verde Y=amarillo R=rojo
-  const send = useCallback((states: string[]) => {
-    const msg     = states.join(",");
+  // whites: e.g. [0, 0, 0, 0] (1=encendido, 0=apagado)
+  // Formato publicado: "G,R,R,R|0,0,0,0"
+  const send = useCallback((states: string[], whites?: (0 | 1 | number)[]) => {
+    let msg = "";
+    if (states.length === 1 && states[0].includes("|")) {
+      msg = states[0];
+    } else {
+      const semaforos = states.join(",");
+      const ledsBlancos = whites ? whites.join(",") : "0,0,0,0";
+      msg = `${semaforos}|${ledsBlancos}`;
+    }
+
     const changed = msg !== lastRef.current;
     lastRef.current = msg;
     if (changed && clientRef.current?.connected) {

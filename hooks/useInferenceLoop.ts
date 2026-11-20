@@ -8,7 +8,7 @@ import type { Zone } from "@/lib/types";
 const LIGHT_COLOR: Record<LightState, string> = {
   green: "#10b981",
   yellow: "#f59e0b",
-  red:   "#ef4444",
+  red: "#ef4444",
 };
 
 const ZONE_COLORS = [
@@ -19,83 +19,113 @@ const ZONE_COLORS = [
 ];
 
 interface Props {
-  videoRef:    React.RefObject<HTMLVideoElement>;
-  canvasRef:   React.RefObject<HTMLCanvasElement>;
+  videoRef: React.RefObject<HTMLVideoElement>;
+  canvasRef: React.RefObject<HTMLCanvasElement>;
   detectorRef: React.RefObject<YoloDetector | DualYoloDetector | null>;
-  zonesRef:    React.MutableRefObject<Zone[]>;
-  draftRef:    React.MutableRefObject<Zone | null>;
-  onError:     (msg: string) => void;
-  onResize:    (aspect: number) => void;
-  onUpdate:    (backend: string) => void;
+  zonesRef: React.MutableRefObject<Zone[]>;
+  draftRef: React.MutableRefObject<Zone | null>;
+  rotacion?: 0 | 90 | 180 | 270;
+  onError: (msg: string) => void;
+  onResize: (aspect: number) => void;
+  onUpdate: (backend: string) => void;
 }
 
 export function useInferenceLoop({
   videoRef, canvasRef, detectorRef,
-  zonesRef, draftRef,
+  zonesRef, draftRef, rotacion = 0,
   onError, onResize, onUpdate,
 }: Props) {
-  const controllerRef = useRef(new TrafficController(0));
-  const detsRef       = useRef<Detection[]>([]);
-  const lightsRef     = useRef<LightState[]>([]);
+  const controllerRef = useRef(new TrafficController(4));
+  const detsRef = useRef<Detection[]>([]);
+  const lightsRef = useRef<LightState[]>(["green", "red", "red", "red"]);
+  const rotacionRef = useRef(rotacion);
+  rotacionRef.current = rotacion;
 
-  const [counts, setCounts] = useState<number[]>([]);
-  const [lights, setLights] = useState<LightState[]>([]);
-  const [total,  setTotal]  = useState(0);
-  const [fps,    setFps]    = useState(0);
+  // Buffer de historial para suavizar conteo por mediana (ventana de 1.5 a 2.0 segundos)
+  const countHistoryRef = useRef<{ t: number; counts: number[] }[]>([]);
+
+  const [counts, setCounts] = useState<number[]>([0, 0, 0, 0]);
+  const [lights, setLights] = useState<LightState[]>(["green", "red", "red", "red"]);
+  const [total, setTotal] = useState(0);
+  const [fps, setFps] = useState(0);
   const [inferMs, setInferMs] = useState(0);
 
   // Exponer setZones para que la página pueda reiniciar el controlador
   const commitZones = (next: Zone[]) => {
     zonesRef.current = next;
-    controllerRef.current = new TrafficController(next.length);
-    lightsRef.current = next.map(() => "red" as LightState);
-    setCounts(next.map(() => 0));
-    setLights(next.map(() => "red" as LightState));
+    const n = Math.max(1, next.length);
+    controllerRef.current = new TrafficController(n);
+    const initialLights = Array.from({ length: n }, (_, i) => (i === 0 ? "green" : "red") as LightState);
+    lightsRef.current = initialLights;
+    countHistoryRef.current = [];
+    setCounts(Array.from({ length: n }, () => 0));
+    setLights(initialLights);
   };
 
   useEffect(() => {
-    let busy     = false;
+    let busy = false;
     let disabled = false;
     let lastDone = 0;
-    let fpsAvg   = 0;
+    let fpsAvg = 0;
     let lastUIUpdate = 0;
 
     const runInference = (video: HTMLVideoElement, det: YoloDetector | DualYoloDetector) => {
       busy = true;
       const tStart = performance.now();
-      det.detect(video)
+      det.detect(video, rotacionRef.current)
         .then((dets) => {
           const lat = Math.round(performance.now() - tStart);
           detsRef.current = dets;
 
-          const vw = video.videoWidth  || 1280;
-          const vh = video.videoHeight || 720;
+          const rawVw = video.videoWidth || 1280;
+          const rawVh = video.videoHeight || 720;
+          const isRot = rotacionRef.current === 90 || rotacionRef.current === 270;
+          const vw = isRot ? rawVh : rawVw;
+          const vh = isRot ? rawVw : rawVh;
           const zs = zonesRef.current ?? [];
-          const c  = zs.map(() => 0);
+          const numZones = Math.max(1, zs.length);
+          const rawCounts = Array.from({ length: numZones }, () => 0);
           for (const d of dets) {
             // Contamos como vehículos para las zonas: toy-car o clases vehiculares de COCO
             const isVehicle = d.isToyCar || d.label === "toy-car" || (d.classId !== 0);
             if (!isVehicle) continue;
 
+            // Punto central del borde inferior del recuadro (x centro, y inferior / base de las ruedas)
             const cx = (d.x1 + d.x2) / 2 / vw;
-            const cy = (d.y1 + d.y2) / 2 / vh;
+            const cyBottom = d.y2 / vh;
             zs.forEach((z, i) => {
-              if (cx >= z.x && cx <= z.x + z.w && cy >= z.y && cy <= z.y + z.h) c[i]++;
+              if (cx >= z.x && cx <= z.x + z.w && cyBottom >= z.y && cyBottom <= z.y + z.h) {
+                rawCounts[i]++;
+              }
             });
           }
-          const states = controllerRef.current.update(c, performance.now());
-          lightsRef.current = states;
 
           const now = performance.now();
-          const dt  = now - lastDone;
-          lastDone  = now;
+
+          // Suavizado temporal: ventana de 1.5 s para calcular la mediana por zona
+          const WINDOW_MS = 1500;
+          countHistoryRef.current.push({ t: now, counts: rawCounts });
+          countHistoryRef.current = countHistoryRef.current.filter((s) => now - s.t <= WINDOW_MS);
+
+          const smoothedCounts = Array.from({ length: numZones }, (_, i) => {
+            const vals = countHistoryRef.current.map((s) => s.counts[i] ?? 0).sort((a, b) => a - b);
+            if (vals.length === 0) return rawCounts[i] ?? 0;
+            const mid = Math.floor(vals.length / 2);
+            return vals.length % 2 !== 0 ? vals[mid] : Math.round((vals[mid - 1] + vals[mid]) / 2);
+          });
+
+          const states = controllerRef.current.update(smoothedCounts, now);
+          lightsRef.current = states;
+
+          const dt = now - lastDone;
+          lastDone = now;
           if (dt > 0 && dt < 2000)
             fpsAvg = fpsAvg === 0 ? 1000 / dt : fpsAvg * 0.8 + (1000 / dt) * 0.2;
 
           if (now - lastUIUpdate > 180) {
             lastUIUpdate = now;
             onUpdate(det.backend);
-            setCounts(c);
+            setCounts(smoothedCounts);
             setLights(states);
             setTotal(dets.length);
             setFps(Math.round(fpsAvg));
@@ -125,7 +155,7 @@ export function useInferenceLoop({
 
         // 1. Solo contorno fino (1px) y 100% transparente adentro (sin pintar el fondo)
         ctx.strokeStyle = theme.border;
-        ctx.lineWidth   = 1;
+        ctx.lineWidth = 1;
         ctx.strokeRect(z.x * W, z.y * H, z.w * W, z.h * H);
 
         // 2. Letrero chico tipo "Z1 · 0 veh" en la esquina, sin bloques oscuros grandes que tapen la zona
@@ -212,16 +242,20 @@ export function useInferenceLoop({
 
     // Inferencia: bucle con throttle para no saturar la CPU ni congelar la UI
     const inferInterval = setInterval(() => {
-      const video  = videoRef.current;
+      const video = videoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas) return;
 
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      if (!vw || !vh) return;
+      const rawVw = video.videoWidth;
+      const rawVh = video.videoHeight;
+      if (!rawVw || !rawVh) return;
+
+      const isRot = rotacionRef.current === 90 || rotacionRef.current === 270;
+      const vw = isRot ? rawVh : rawVw;
+      const vh = isRot ? rawVw : rawVh;
 
       if (canvas.width !== vw || canvas.height !== vh) {
-        canvas.width  = vw;
+        canvas.width = vw;
         canvas.height = vh;
         onResize(vw / vh);
       }
@@ -245,5 +279,5 @@ export function useInferenceLoop({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { counts, lights, total, fps, inferMs, commitZones, lightsRef, detsRef };
+  return { counts, lights, total, fps, inferMs, commitZones, lightsRef, detsRef, controllerRef };
 }

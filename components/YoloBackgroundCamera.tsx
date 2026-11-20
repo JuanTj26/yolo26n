@@ -4,8 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useYoloDetector } from "@/hooks/useYoloDetector";
 import { useVideoSource } from "@/hooks/useVideoSource";
 import { useInferenceLoop } from "@/hooks/useInferenceLoop";
+import { useMqttSemaforos } from "@/hooks/useMqttSemaforos";
 import type { Zone } from "@/lib/types";
-import { Camera, Upload, Trash2, Video, RotateCw, Database, Check } from "lucide-react";
+import { Camera, Upload, Trash2, Video, RotateCw, Database, Check, Footprints, Clock, Lock } from "lucide-react";
+import { type PedestrianState, type SolicitudPeatonal, STORAGE_KEY_SOLICITUDES } from "@/lib/pedestrianTypes";
+
+// ── Parámetros de Cruce Peatonal ──
+export const TIEMPO_CRUCE_FIJO_S = 10;     // Tiempo de cruce fijo para peatones (10s)
+export const COOLDOWN_CRUCE_S = 20;        // Tiempo bloqueado tras cruzar (20s)
+export const USAR_CONTEO_PERSONAS = false; // Desactivado por ahora (listo para activar luego)
 
 interface Props {
   onDetections?: (count: number) => void;
@@ -26,6 +33,7 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
   const [, setAspect] = useState(16 / 9);
   const [zones, setZones] = useState<Zone[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [rotacion, setRotacion] = useState<0 | 90 | 180 | 270>(0);
 
   // 1. Exact detector hook with dynamic mode support
   const { detectorRef, modelStatus, backend, setBackend, modelMode, setModelMode } =
@@ -43,16 +51,240 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     useVideoSource(videoRef, setError);
 
   // 3. Exact inference loop and canvas renderer from /demo
-  const { total, fps, commitZones, detsRef } = useInferenceLoop({
+  const { total, fps, commitZones, detsRef, lights, controllerRef } = useInferenceLoop({
     videoRef,
     canvasRef,
     detectorRef,
     zonesRef,
     draftRef,
+    rotacion,
     onError: setError,
     onResize: setAspect,
     onUpdate: setBackend,
   });
+
+  // 4. Conexión MQTT con ESP32 para sincronizar semáforos físicos
+  const { send: sendMqtt, status: mqttStatus, connected: mqttConnected } = useMqttSemaforos();
+
+  // 5. Lógica de Cruce Peatonal por Zona (Estado único sincronizado)
+  type ZonaPeatonalInfo = {
+    estado: PedestrianState;
+    cuenta: number;
+    solicitadoAt?: number;
+  };
+
+  const [zonasPeatonal, setZonasPeatonal] = useState<ZonaPeatonalInfo[]>([
+    { estado: "normal", cuenta: 0 },
+    { estado: "normal", cuenta: 0 },
+    { estado: "normal", cuenta: 0 },
+    { estado: "normal", cuenta: 0 },
+  ]);
+
+  const zonasPeatonalRef = useRef(zonasPeatonal);
+  zonasPeatonalRef.current = zonasPeatonal;
+
+  const lightsRefCurrent = useRef(lights);
+  lightsRefCurrent.current = lights;
+
+  const solicitudesRef = useRef<Record<number, SolicitudPeatonal>>({});
+  const [notificacionPeatonal, setNotificacionPeatonal] = useState<string | null>(null);
+
+  // Solicitar cruce peatonal para la Zona N (índice 0-based)
+  const pedirCruce = (zonaIdx: number) => {
+    // 1. Regla de seguridad vial: Solo UN cruce peatonal activo a la vez en todo el sistema
+    const hayOtroCruceActivo = zonasPeatonalRef.current.some(
+      (z, i) => i < zones.length && (z.estado === "solicitado" || z.estado === "cruzando")
+    );
+    if (hayOtroCruceActivo) {
+      setNotificacionPeatonal("Ya hay una solicitud de cruce en proceso. Espera a que termine.");
+      setTimeout(() => setNotificacionPeatonal(null), 3000);
+      return;
+    }
+
+    // 2. Si esta zona ya está en solicitado, cruzando o cooldown, ignorar clic
+    const actual = zonasPeatonalRef.current[zonaIdx]?.estado ?? "normal";
+    if (actual !== "normal") return;
+
+    // 3. Bloquear la zona en el controlador vehicular
+    const exitoBloqueo = controllerRef.current?.blockZone(zonaIdx, true) ?? true;
+    if (!exitoBloqueo) {
+      setNotificacionPeatonal("Por seguridad, al menos una zona vehicular debe permanecer libre.");
+      setTimeout(() => setNotificacionPeatonal(null), 3500);
+      return;
+    }
+
+    // 4. Crear registro de solicitud para dashboard y TiDB
+    const ahora = new Date();
+    const id = `sol-${Date.now()}-${zonaIdx}`;
+    const horaStr = ahora.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const nuevaSolicitud: SolicitudPeatonal = {
+      id,
+      zona: zonaIdx,
+      hora: horaStr,
+      timestampInicio: Date.now(),
+      segundosEspera: 0,
+      atendida: false,
+    };
+    solicitudesRef.current[zonaIdx] = nuevaSolicitud;
+
+    // localStorage (dashboard local)
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_SOLICITUDES);
+      const prev: SolicitudPeatonal[] = raw ? JSON.parse(raw) : [];
+      const updated = [nuevaSolicitud, ...prev.slice(0, 99)];
+      localStorage.setItem(STORAGE_KEY_SOLICITUDES, JSON.stringify(updated));
+      window.dispatchEvent(new Event("smarttraffic_solicitudes_actualizadas"));
+    } catch (e) {
+      console.warn("Error guardando solicitud peatonal en localStorage:", e);
+    }
+
+    // TiDB Cloud — guardar solicitud inicial (atendida=false, espera=0)
+    fetch("/api/solicitudes-peatonales", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        zona: zonaIdx,
+        hora_solicitud: horaStr,
+        segundos_espera: 0,
+        atendida: false,
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        // Guardamos el ID de TiDB en la solicitud para actualizar luego con PATCH
+        if (data.ok && data.resultado?.insertId) {
+          solicitudesRef.current[zonaIdx] = {
+            ...nuevaSolicitud,
+            tidbId: data.resultado.insertId,
+          };
+        }
+      })
+      .catch((e) => console.warn("Error guardando solicitud en TiDB:", e));
+
+    // 5. Iniciar SIEMPRE en estado 'solicitado' (ámbar).
+    setZonasPeatonal((prev) => {
+      const next = [...prev];
+      next[zonaIdx] = { estado: "solicitado", cuenta: 0, solicitadoAt: Date.now() };
+      return next;
+    });
+
+    setNotificacionPeatonal(`Zona ${zonaIdx + 1}: Cruce solicitado. Deteniendo vehículos (cambio a rojo)...`);
+    setTimeout(() => setNotificacionPeatonal(null), 3500);
+  };
+
+  // Temporizador único por segundo: transiciones y cuentas regresivas sin bucles
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setZonasPeatonal((prev) => {
+        let cambio = false;
+        const next = [...prev];
+        const currentLights = lightsRefCurrent.current;
+
+        for (let i = 0; i < 4; i++) {
+          const item = prev[i] || { estado: "normal", cuenta: 0 };
+          const luzZona = currentLights[i] ?? "green";
+
+          // CASO 1: Está en 'solicitado' y el semáforo vehicular YA pasó físicamente a 'red'
+          if (item.estado === "solicitado") {
+            if (luzZona === "red") {
+              const sol = solicitudesRef.current[i];
+              if (sol && !sol.atendida) {
+                sol.atendida = true;
+                sol.segundosEspera = Math.max(
+                  1,
+                  Math.round((Date.now() - (item.solicitadoAt || sol.timestampInicio)) / 1000)
+                );
+
+                // Actualizar localStorage (dashboard local)
+                try {
+                  const raw = localStorage.getItem(STORAGE_KEY_SOLICITUDES);
+                  if (raw) {
+                    const list: SolicitudPeatonal[] = JSON.parse(raw);
+                    const idx = list.findIndex((s) => s.id === sol.id);
+                    if (idx !== -1) {
+                      list[idx].atendida = true;
+                      list[idx].segundosEspera = sol.segundosEspera;
+                      localStorage.setItem(STORAGE_KEY_SOLICITUDES, JSON.stringify(list));
+                      window.dispatchEvent(new Event("smarttraffic_solicitudes_actualizadas"));
+                    }
+                  }
+                } catch (e) { }
+
+                // PATCH en TiDB Cloud: marcar como atendida con segundos de espera reales
+                if (sol.tidbId) {
+                  fetch("/api/solicitudes-peatonales", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      id: sol.tidbId,
+                      atendida: true,
+                      segundos_espera: sol.segundosEspera,
+                    }),
+                  }).catch((e) => console.warn("Error actualizando solicitud en TiDB:", e));
+                }
+              }
+
+              next[i] = { estado: "cruzando", cuenta: TIEMPO_CRUCE_FIJO_S };
+              cambio = true;
+            }
+          }
+          // CASO 2: Está 'cruzando' (cuenta regresiva de 10s a 1s)
+          else if (item.estado === "cruzando") {
+            if (item.cuenta > 1) {
+              next[i] = { ...item, cuenta: item.cuenta - 1 };
+              cambio = true;
+            } else {
+              // Fin de cruce: desbloquear zona vehicular y pasar a cooldown de 20s
+              controllerRef.current?.blockZone(i, false);
+              next[i] = { estado: "bloqueado", cuenta: COOLDOWN_CRUCE_S };
+              cambio = true;
+            }
+          }
+          // CASO 3: Está 'bloqueado' (cooldown de 20s a 1s)
+          else if (item.estado === "bloqueado") {
+            if (item.cuenta > 1) {
+              next[i] = { ...item, cuenta: item.cuenta - 1 };
+              cambio = true;
+            } else {
+              // Fin de cooldown: vuelve a disponible
+              next[i] = { estado: "normal", cuenta: 0 };
+              cambio = true;
+            }
+          }
+        }
+
+        return cambio ? next : prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Publicar estados de semáforos y blancos por MQTT al ESP32 (formato "G,R,R,R|0,0,0,0")
+  useEffect(() => {
+    const states = ["R", "R", "R", "R"];
+    if (lights && lights.length > 0) {
+      lights.forEach((l, i) => {
+        if (i < 4) {
+          states[i] = l === "green" ? "G" : l === "yellow" ? "Y" : "R";
+        }
+      });
+    }
+
+    // Regla de seguridad física estricta:
+    // El LED blanco SOLO puede estar en 1 si el semáforo vehicular de esa zona está en 'R' (Rojo)
+    // Y el peatón está en fase de cruce activo
+    const blancosSeguros: (0 | 1)[] = [0, 0, 0, 0];
+    for (let i = 0; i < 4; i++) {
+      if (zonasPeatonal[i]?.estado === "cruzando" && states[i] === "R") {
+        blancosSeguros[i] = 1;
+      } else {
+        blancosSeguros[i] = 0;
+      }
+    }
+
+    sendMqtt(states, blancosSeguros);
+  }, [lights, zonasPeatonal, sendMqtt]);
 
   // Guardado periódico en TiDB
   const [intervaloMinutos, setIntervaloMinutos] = useState<number>(1);
@@ -148,6 +380,15 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     zonesRef.current = next;
     setZones(next);
     commitZones(next);
+    if (next.length === 0) {
+      setZonasPeatonal([
+        { estado: "normal", cuenta: 0 },
+        { estado: "normal", cuenta: 0 },
+        { estado: "normal", cuenta: 0 },
+        { estado: "normal", cuenta: 0 },
+      ]);
+      controllerRef.current?.setBlockedZones([]);
+    }
   };
 
   // Convierte coordenadas de cliente a normalizadas [0,1] usando el canvas como referencia
@@ -205,24 +446,166 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
   }, [isDrawing]);
 
   return (
-    <div className="fixed inset-0 z-0 bg-zinc-950 overflow-hidden select-none">
+    <div className="fixed inset-0 z-10 bg-zinc-950 overflow-hidden select-none">
       {/* ── Exact Video feed from /demo (1:1, fixed, no zoom shake) ── */}
       <video
         ref={videoRef}
         autoPlay
         muted
         playsInline
-        className="absolute inset-0 w-full h-full object-cover z-0"
+        className={`absolute inset-0 w-full h-full object-cover z-0 transition-transform duration-200 ${rotacion === 90
+            ? "rotate-90 scale-[1.35]"
+            : rotacion === 180
+              ? "rotate-180"
+              : rotacion === 270
+                ? "-rotate-90 scale-[1.35]"
+                : ""
+          }`}
         onLoadedMetadata={() => videoRef.current?.play().catch(() => { })}
       />
 
       {/* ── Exact Canvas overlay from /demo with Cyan boxes & Traffic Zones ── */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full object-cover z-10 cursor-crosshair touch-none"
+        className={`absolute inset-0 w-full h-full object-cover z-10 cursor-crosshair touch-none transition-transform duration-200 ${rotacion === 90
+            ? "rotate-90 scale-[1.35]"
+            : rotacion === 180
+              ? "rotate-180"
+              : rotacion === 270
+                ? "-rotate-90 scale-[1.35]"
+                : ""
+          }`}
         style={{ touchAction: "none" }}
         onPointerDown={onPointerDown}
       />
+
+      {/* ── Panel Flotante de Cruce Peatonal por Zona (SOLO cuando el usuario dibuja rectángulos) ── */}
+      {zones.length > 0 && (
+        <div
+          className={`fixed top-16 sm:top-20 left-3 sm:left-6 z-40 flex flex-col gap-2 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 p-3 sm:p-3.5 rounded-2xl shadow-xl w-[275px] sm:w-[310px] text-white pointer-events-auto transition-opacity duration-150 ${isDrawing ? "opacity-0 pointer-events-none" : "opacity-100"
+            }`}
+        >
+          {/* Cabecera */}
+          <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-zinc-700/50">
+            <div className="flex items-center gap-1.5">
+              <Footprints className="h-4 w-4 text-[#c94c1a]" />
+              <span className="text-xs font-bold font-sans tracking-tight text-zinc-100">Cruce Peatonal</span>
+            </div>
+            <span className="text-[10px] text-zinc-500 font-mono bg-zinc-800 px-2 py-0.5 rounded-full border border-zinc-700">
+              {TIEMPO_CRUCE_FIJO_S}s · {COOLDOWN_CRUCE_S}s espera
+            </span>
+          </div>
+
+          {/* Lista de botones: EXACTAMENTE los rectángulos dibujados por el usuario */}
+          <div className="flex flex-col gap-1.5 mt-1">
+            {zones.map((_, i) => {
+              const info = zonasPeatonal[i] ?? { estado: "normal", cuenta: 0 };
+              const estado = info.estado;
+              const cuenta = info.cuenta;
+              const luz = lights[i] ?? (i === 0 ? "green" : "red");
+
+              // Dots de zona: tonos apagados slate/stone, no neón
+              const colorZona = ["#64748b", "#6b7280", "#78716c", "#71717a"][i % 4];
+
+              // Color del indicador de semáforo: apagado, no brillante
+              const luzColor =
+                luz === "green" ? "#4ade80" : luz === "yellow" ? "#ca8a04" : "#b45252";
+              const luzLabel =
+                luz === "green" ? "● Verde" : luz === "yellow" ? "● Amarillo" : "● Rojo";
+
+              // Si otra zona ya está solicitada o cruzando, deshabilitar temporalmente este botón
+              const otraZonaActiva = zonasPeatonal.some(
+                (z, idx) => idx !== i && idx < zones.length && (z.estado === "solicitado" || z.estado === "cruzando")
+              );
+
+              return (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-1.5 bg-zinc-800/60 hover:bg-zinc-800 p-2 rounded-xl border border-zinc-700/40 transition"
+                >
+                  {/* Info de zona */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0 opacity-80"
+                      style={{ background: colorZona }}
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold font-sans leading-none text-zinc-200">Zona {i + 1}</span>
+                      <span className="text-[9px] font-mono mt-0.5" style={{ color: luzColor }}>
+                        {luzLabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Botón interactivo con sus 4 estados */}
+                  {estado === "normal" && (
+                    <button
+                      type="button"
+                      disabled={otraZonaActiva}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        if (!otraZonaActiva) pedirCruce(i);
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!otraZonaActiva) pedirCruce(i);
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${otraZonaActiva
+                          ? "bg-zinc-700/50 text-zinc-500 cursor-not-allowed border border-zinc-600/30"
+                          : "bg-[#c94c1a] hover:bg-[#b84418] active:scale-95 text-white cursor-pointer shadow-sm"
+                        }`}
+                      title={
+                        otraZonaActiva
+                          ? "Espera a que termine el cruce activo en otra zona"
+                          : `Solicitar paso peatonal en Zona ${i + 1}`
+                      }
+                    >
+                      <Footprints className="h-3 w-3" />
+                      <span>{otraZonaActiva ? "En espera" : "Pedir Cruce"}</span>
+                    </button>
+                  )}
+
+                  {estado === "solicitado" && (
+                    <div
+                      className="px-2.5 py-1.5 rounded-lg bg-yellow-900/40 border border-yellow-700/50 text-yellow-400/90 text-[11px] font-semibold flex items-center gap-1 animate-pulse"
+                      title="Esperando que el semáforo vehicular pase a rojo"
+                    >
+                      <Clock className="h-3 w-3" />
+                      <span>Solicitado...</span>
+                    </div>
+                  )}
+
+                  {estado === "cruzando" && (
+                    <div
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-900/60 border border-emerald-700/50 text-emerald-300 text-[11px] font-bold flex items-center gap-1.5"
+                      title="Paso peatonal activo. LED blanco encendido en ESP32."
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      <span>Cruzar ({cuenta}s)</span>
+                    </div>
+                  )}
+
+                  {estado === "bloqueado" && (
+                    <div
+                      className="px-2.5 py-1.5 rounded-lg bg-zinc-800 text-zinc-500 text-[11px] font-medium flex items-center gap-1 border border-zinc-700/40"
+                      title="Tiempo de espera preventivo antes de permitir otro cruce"
+                    >
+                      <Lock className="h-3 w-3" />
+                      <span>Espera ({cuenta}s)</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {notificacionPeatonal && (
+            <div className="mt-1 p-2 rounded-xl bg-zinc-800 border border-zinc-600/40 text-[11px] text-zinc-300 leading-snug">
+              {notificacionPeatonal}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Inactive Overlay SOLO si ocurre un error real al abrir la cámara ── */}
       {source === "ninguna" && Boolean(error) && (
@@ -287,19 +670,20 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
 
       {/* ── Bottom Floating Status Pill (Matches /demo stats) ── */}
       {source !== "ninguna" && (
-        <div className={`fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-30 flex items-center gap-2 bg-black/85 backdrop-blur-md border border-white/15 px-3 sm:px-3.5 py-1.5 rounded-full text-white text-xs font-mono shadow-2xl pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar transition-opacity duration-150 ${isDrawing ? "opacity-0 pointer-events-none" : ""}`}>
-          {/* Status Dot */}
+        <div className={`fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-30 flex items-center gap-2 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/50 px-3 sm:px-3.5 py-1.5 rounded-full text-white text-xs font-mono shadow-xl pointer-events-auto max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar transition-opacity duration-150 ${isDrawing ? "opacity-0 pointer-events-none" : ""}`}>
+          {/* Status Dot modelo */}
           <span className="relative flex h-2 w-2">
             {modelStatus === "listo" && (
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-50" />
             )}
             <span
-              className={`relative inline-flex rounded-full h-2 w-2 ${modelStatus === "listo" ? "bg-emerald-500" : "bg-amber-400"
+              className={`relative inline-flex rounded-full h-2 w-2 ${modelStatus === "listo" ? "bg-zinc-300" : "bg-yellow-700"
                 }`}
+            />
             />
           </span>
 
-          <span className="font-semibold text-zinc-200">
+          <span className="font-semibold text-zinc-300">
             {modelStatus === "cargando" ? "Cargando…" : backend || "YOLO26n"}
           </span>
 
@@ -309,7 +693,7 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
           <select
             value={modelMode}
             onChange={(e) => setModelMode(e.target.value as any)}
-            className="bg-zinc-800 border border-white/20 text-[#f95721] font-semibold rounded px-2 py-0.5 text-[11px] font-sans outline-none cursor-pointer"
+            className="bg-zinc-800 border border-zinc-700 text-zinc-300 font-semibold rounded px-2 py-0.5 text-[11px] font-sans outline-none cursor-pointer"
             title="Seleccionar modelo de detección"
           >
             <option value="general">General (COCO)</option>
@@ -318,21 +702,21 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
 
           <span className="text-zinc-600">|</span>
 
-          {/* Detections */}
-          <span className="text-cyan-400 font-bold">{total} detectados</span>
+          {/* Detecciones */}
+          <span className="text-zinc-200 font-bold">{total} detectados</span>
 
           <span className="text-zinc-600">|</span>
 
           {/* FPS */}
-          <span className="text-emerald-400 font-bold">{fps} FPS</span>
+          <span className="text-zinc-400 font-bold">{fps} FPS</span>
 
-          {/* Zones clean button if zones exist */}
+          {/* Limpiar zonas */}
           {zones.length > 0 && (
             <>
               <span className="text-zinc-600">|</span>
               <button
                 onClick={() => handleCommitZones([])}
-                className="flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors text-[11px]"
+                className="flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors text-[11px]"
                 title="Borrar zonas de tráfico"
               >
                 <Trash2 className="h-3 w-3" />
@@ -341,7 +725,7 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
             </>
           )}
 
-          {/* Camera switcher (Always visible so user can pick Iriun Webcam / iPhone) */}
+          {/* Selector de cámara */}
           <span className="text-zinc-600">|</span>
           <div className="flex items-center gap-1">
             <select
@@ -350,8 +734,8 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
                 setDeviceId(e.target.value);
                 startWebcam(e.target.value);
               }}
-              className="bg-zinc-800 border border-white/20 text-zinc-200 rounded px-2 py-0.5 text-[11px] font-sans font-medium outline-none cursor-pointer max-w-[130px] sm:max-w-[180px] truncate"
-              title="Seleccionar cámara (ej. Iriun Webcam)"
+              className="bg-zinc-800 border border-zinc-700 text-zinc-300 rounded px-2 py-0.5 text-[11px] font-sans font-medium outline-none cursor-pointer max-w-[130px] sm:max-w-[180px] truncate"
+              title="Seleccionar cámara"
             >
               {devices.length === 0 ? (
                 <option value="">Buscando cámaras…</option>
@@ -365,33 +749,66 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
             </select>
             <button
               onClick={() => refreshDevices()}
-              className="p-1 hover:bg-white/20 rounded text-zinc-400 hover:text-white transition-colors"
-              title="Actualizar lista de cámaras (detectar Iriun)"
+              className="p-1 hover:bg-zinc-700 rounded text-zinc-500 hover:text-zinc-300 transition-colors"
+              title="Actualizar lista de cámaras"
             >
               <RotateCw className="h-3 w-3" />
             </button>
           </div>
 
-          {/* Upload video file */}
+          {/* Girar cámara */}
+          <button
+            onClick={() => setRotacion((prev) => ((prev + 90) % 360) as 0 | 90 | 180 | 270)}
+            className={`p-1 px-2 rounded text-[11px] font-sans font-semibold flex items-center gap-1 transition-all ${rotacion !== 0
+                ? "bg-zinc-700 text-zinc-200 ring-1 ring-zinc-500"
+                : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50"
+              }`}
+            title="Girar orientación de cámara"
+          >
+            <RotateCw className="h-3 w-3" />
+            <span>{rotacion === 0 ? "Girar" : `${rotacion}°`}</span>
+          </button>
+
+          {/* Subir video */}
           <span className="text-zinc-600">|</span>
           <label
-            className="p-1 hover:bg-white/20 rounded cursor-pointer text-zinc-400 hover:text-white transition-colors"
+            className="p-1 hover:bg-zinc-700/50 rounded cursor-pointer text-zinc-500 hover:text-zinc-300 transition-colors"
             title="Cargar video"
           >
             <Upload className="h-3.5 w-3.5" />
             <input type="file" accept="video/*" onChange={onFile} className="sr-only" />
           </label>
 
+          {/* Estado MQTT / ESP32 */}
+          <span className="text-zinc-600">|</span>
+          <div
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-sans"
+            style={{
+              borderColor: mqttConnected ? "rgba(100,116,139,0.5)" : "rgba(63,63,70,0.6)",
+              background: mqttConnected ? "rgba(51,65,85,0.5)" : "rgba(24,24,27,0.5)",
+              color: mqttConnected ? "#94a3b8" : "#52525b",
+            }}
+            title={`Conexión MQTT para ESP32: ${mqttStatus}`}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full inline-block"
+              style={{
+                background: mqttConnected ? "#94a3b8" : mqttStatus === "conectando" ? "#854d0e" : "#7f1d1d",
+              }}
+            />
+            <span className="font-semibold">ESP32</span>
+          </div>
+
           {/* Control de Auto-guardado en TiDB */}
           <span className="text-zinc-600">|</span>
-          <div className="flex items-center gap-1.5 bg-zinc-900/90 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-            <Database className="h-3 w-3 text-emerald-400" />
-            <span className="text-[10px] text-zinc-300 font-sans">TiDB:</span>
+          <div className="flex items-center gap-1.5 bg-zinc-800/80 border border-zinc-700/50 px-2 py-0.5 rounded-full">
+            <Database className="h-3 w-3 text-zinc-500" />
+            <span className="text-[10px] text-zinc-500 font-sans">TiDB:</span>
             <select
               value={intervaloMinutos}
               onChange={(e) => setIntervaloMinutos(Number(e.target.value))}
-              className="bg-transparent text-[10px] text-emerald-300 font-bold outline-none cursor-pointer"
-              title="Intervalo para guardar métricas en la base de datos"
+              className="bg-transparent text-[10px] text-zinc-300 font-bold outline-none cursor-pointer"
+              title="Intervalo para guardar métricas"
             >
               <option value={0} className="bg-zinc-900 text-zinc-400">Pausado</option>
               <option value={1} className="bg-zinc-900 text-zinc-200">Cada 1 min</option>
@@ -404,8 +821,8 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
               onClick={guardarLecturaTiDB}
               disabled={guardandoDB}
               className={`p-1 rounded text-[10px] font-sans font-bold flex items-center gap-1 transition-all ${guardadoExitoso
-                  ? "bg-emerald-600 text-white"
-                  : "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40"
+                  ? "bg-zinc-600 text-zinc-200"
+                  : "bg-zinc-700/50 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
                 }`}
               title="Guardar una captura de métricas inmediatamente en TiDB"
             >
