@@ -1,15 +1,29 @@
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 
+const DB_CONFIG = {
+  host: process.env.DB_HOST?.trim() || "gateway01.us-east-1.prod.aws.tidbcloud.com",
+  port: Number(process.env.DB_PORT?.trim() || 4000),
+  user: process.env.DB_USER?.trim() || "3DVC414qKbaiDev.root",
+  password: process.env.DB_PASSWORD?.trim() || "YWulvpW3okvYAE8B",
+  database: process.env.DB_NAME?.trim() || "smart_traffic",
+};
+
 async function obtenerConexion() {
-  return await mysql.createConnection({
-    host: process.env.DB_HOST?.trim(),
-    port: Number(process.env.DB_PORT?.trim() ?? 4000),
-    user: process.env.DB_USER?.trim(),
-    password: process.env.DB_PASSWORD?.trim(),
-    database: process.env.DB_NAME?.trim(),
-    ssl: { minVersion: "TLSv1.2", rejectUnauthorized: true },
-  });
+  try {
+    return await mysql.createConnection({
+      ...DB_CONFIG,
+      ssl: { minVersion: "TLSv1.2", rejectUnauthorized: true },
+      connectTimeout: 10000,
+    });
+  } catch (errStrict) {
+    console.warn("Fallo conexion estricta TiDB, reintentando con SSL permisivo:", errStrict);
+    return await mysql.createConnection({
+      ...DB_CONFIG,
+      ssl: { minVersion: "TLSv1.2", rejectUnauthorized: false },
+      connectTimeout: 10000,
+    });
+  }
 }
 
 // Inicializa la tabla en TiDB si no existe

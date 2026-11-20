@@ -42,7 +42,6 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
   const dragPanelOffsetRef = useRef<{ offsetX: number; offsetY: number }>({ offsetX: 0, offsetY: 0 });
 
   const onStartDragPanel = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
     e.stopPropagation();
     dragPanelOffsetRef.current = {
       offsetX: e.clientX - panelPos.x,
@@ -55,10 +54,10 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
     if (!panelDragging) return;
 
     const onPanelMove = (e: PointerEvent) => {
-      const maxX = Math.max(10, window.innerWidth - 300);
-      const maxY = Math.max(10, window.innerHeight - 100);
+      const maxX = Math.max(10, window.innerWidth - 320);
+      const maxY = Math.max(10, window.innerHeight - 80);
       const newX = Math.max(10, Math.min(maxX, e.clientX - dragPanelOffsetRef.current.offsetX));
-      const newY = Math.max(10, Math.min(maxY, e.clientY - dragPanelOffsetRef.current.offsetY));
+      const newY = Math.max(65, Math.min(maxY, e.clientY - dragPanelOffsetRef.current.offsetY));
       setPanelPos({ x: newX, y: newY });
     };
 
@@ -557,33 +556,35 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
             left: `${panelPos.x}px`,
             top: `${panelPos.y}px`,
           }}
-          className={`fixed z-40 flex flex-col gap-2 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 p-3 sm:p-3.5 rounded-2xl shadow-2xl w-[285px] sm:w-[315px] text-white pointer-events-auto transition-opacity duration-150 ${
+          className={`fixed z-50 flex flex-col gap-2 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 p-3 sm:p-3.5 rounded-2xl shadow-2xl w-[285px] sm:w-[315px] text-white pointer-events-auto transition-opacity duration-150 ${
             isDrawing ? "opacity-0 pointer-events-none" : "opacity-100"
           }`}
         >
           {/* Cabecera con Grip para arrastrar y botón para colapsar */}
           <div
             onPointerDown={onStartDragPanel}
+            style={{ touchAction: "none" }}
             className="flex items-center justify-between gap-2 pb-1.5 border-b border-zinc-700/50 cursor-grab active:cursor-grabbing select-none"
             title="Arrastra desde aquí para mover el panel"
           >
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 pointer-events-none">
               <GripVertical className="h-4 w-4 text-zinc-500 flex-shrink-0" />
               <Footprints className="h-4 w-4 text-[#c94c1a]" />
               <span className="text-xs font-bold font-sans tracking-tight text-zinc-100">Cruce Peatonal</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-zinc-500 font-mono bg-zinc-800 px-2 py-0.5 rounded-full border border-zinc-700">
+              <span className="text-[10px] text-zinc-500 font-mono bg-zinc-800 px-2 py-0.5 rounded-full border border-zinc-700 pointer-events-none">
                 {TIEMPO_CRUCE_FIJO_S}s · {COOLDOWN_CRUCE_S}s
               </span>
               <button
                 type="button"
                 onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
                   setPanelColapsado(!panelColapsado);
                 }}
-                className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition cursor-pointer"
+                className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition cursor-pointer pointer-events-auto"
                 title={panelColapsado ? "Expandir panel" : "Minimizar panel"}
               >
                 {panelColapsado ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
@@ -679,15 +680,13 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
                         <button
                           type="button"
                           disabled={otraZonaActiva}
-                          onPointerDown={(e) => {
-                            e.stopPropagation();
-                            if (!otraZonaActiva) pedirCruce(i);
-                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!otraZonaActiva) pedirCruce(i);
                           }}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition pointer-events-auto ${
                             otraZonaActiva
                               ? "bg-zinc-700/50 text-zinc-500 cursor-not-allowed border border-zinc-600/30"
                               : "bg-[#c94c1a] hover:bg-[#b84418] active:scale-95 text-white cursor-pointer shadow-sm"
@@ -819,7 +818,6 @@ export default function YoloBackgroundCamera({ onDetections, initialModelMode = 
             <span
               className={`relative inline-flex rounded-full h-2 w-2 ${modelStatus === "listo" ? "bg-zinc-300" : "bg-yellow-700"
                 }`}
-            />
             />
           </span>
 

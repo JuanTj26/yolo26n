@@ -214,25 +214,23 @@ export default function ModernTrafficDashboard() {
       />
 
       {/* ── Tarjetas Flotantes en Escritorio (Desktop HUD Izquierda) ── */}
-      <div
-        className={`hidden md:flex fixed top-24 left-6 lg:left-8 z-20 flex-col gap-3 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${isCamera || viewMode === "neza"
-          ? "opacity-0 pointer-events-none -translate-x-4"
-          : "opacity-100 translate-x-0"
-          }`}
-      >
-        <TarjetaVision s={s} />
-        <TarjetaEspera s={s} totalEsperando={totalWaiting} />
-      </div>
+      {!isCamera && viewMode !== "neza" && (
+        <div
+          className="hidden md:flex fixed top-24 left-6 lg:left-8 z-20 flex-col gap-3 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 opacity-100 translate-x-0"
+        >
+          <TarjetaVision s={s} />
+          <TarjetaEspera s={s} totalEsperando={totalWaiting} />
+        </div>
+      )}
 
       {/* ── Tarjeta Flotante en Escritorio (Desktop HUD Derecha: Flujo) ── */}
-      <div
-        className={`hidden md:block fixed top-24 right-6 lg:right-8 z-20 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 ${isCamera || viewMode === "neza"
-          ? "opacity-0 pointer-events-none translate-x-4"
-          : "opacity-100 translate-x-0"
-          }`}
-      >
-        <TarjetaFlujo s={s} porcentajeFlujo={flowPercent} />
-      </div>
+      {!isCamera && viewMode !== "neza" && (
+        <div
+          className="hidden md:block fixed top-24 right-6 lg:right-8 z-20 pointer-events-auto w-[250px] lg:w-[270px] select-text transition-all duration-300 opacity-100 translate-x-0"
+        >
+          <TarjetaFlujo s={s} porcentajeFlujo={flowPercent} />
+        </div>
+      )}
 
       {/* ── Panel Móvil (Inferior Desplegable / Cápsula izquierda) ── */}
       {!isCamera && viewMode !== "neza" && (

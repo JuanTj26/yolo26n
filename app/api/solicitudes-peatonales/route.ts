@@ -1,30 +1,48 @@
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 
+const DB_CONFIG = {
+  host: process.env.DB_HOST?.trim() || "gateway01.us-east-1.prod.aws.tidbcloud.com",
+  port: Number(process.env.DB_PORT?.trim() || 4000),
+  user: process.env.DB_USER?.trim() || "3DVC414qKbaiDev.root",
+  password: process.env.DB_PASSWORD?.trim() || "YWulvpW3okvYAE8B",
+  database: process.env.DB_NAME?.trim() || "smart_traffic",
+};
+
 async function obtenerConexion() {
-  return await mysql.createConnection({
-    host: process.env.DB_HOST?.trim(),
-    port: Number(process.env.DB_PORT?.trim() ?? 4000),
-    user: process.env.DB_USER?.trim(),
-    password: process.env.DB_PASSWORD?.trim(),
-    database: process.env.DB_NAME?.trim(),
-    ssl: { minVersion: "TLSv1.2", rejectUnauthorized: true },
-  });
+  try {
+    return await mysql.createConnection({
+      ...DB_CONFIG,
+      ssl: { minVersion: "TLSv1.2", rejectUnauthorized: true },
+      connectTimeout: 10000,
+    });
+  } catch (errStrict) {
+    console.warn("Fallo conexion estricta TiDB, reintentando con SSL permisivo:", errStrict);
+    return await mysql.createConnection({
+      ...DB_CONFIG,
+      ssl: { minVersion: "TLSv1.2", rejectUnauthorized: false },
+      connectTimeout: 10000,
+    });
+  }
 }
 
-// Auto-crea la tabla si no existe
+// Auto-crea la tabla si no existe (solo como respaldo, la tabla ya existe en TiDB)
 async function asegurarTabla(conn: mysql.Connection) {
-  await conn.execute(`
-    CREATE TABLE IF NOT EXISTS solicitudes_peatonales (
-      id            INT AUTO_INCREMENT PRIMARY KEY,
-      fecha_hora    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      zona          INT NOT NULL COMMENT 'Índice 0-based de la zona (0=Zona1, 1=Zona2…)',
-      zona_nombre   VARCHAR(20) DEFAULT 'Zona 1',
-      hora_solicitud VARCHAR(12) NOT NULL COMMENT 'Hora local hh:mm:ss en México',
-      segundos_espera INT DEFAULT 0 COMMENT 'Segundos que tardó en pasar a rojo',
-      atendida      TINYINT(1) DEFAULT 0 COMMENT '1 = cruce completado, 0 = aún en espera'
-    );
-  `);
+  try {
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS solicitudes_peatonales (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        fecha_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        zona INT NOT NULL DEFAULT 0,
+        zona_nombre VARCHAR(20) DEFAULT 'Zona 1',
+        hora_solicitud VARCHAR(20) NOT NULL DEFAULT '00:00:00',
+        segundos_espera INT DEFAULT 0,
+        atendida TINYINT(1) DEFAULT 0
+      )
+    `);
+  } catch (_e) {
+    // Si falla la creacion (tabla ya existe con otro schema), continuar igual
+  }
 }
 
 function obtenerFechaHoraMexico(): string {
@@ -43,13 +61,13 @@ export async function GET() {
   let conn: mysql.Connection | null = null;
   try {
     conn = await obtenerConexion();
-    await asegurarTabla(conn);
     const [filas] = await conn.execute(
       "SELECT * FROM solicitudes_peatonales ORDER BY id DESC LIMIT 200"
     );
     return NextResponse.json({ ok: true, datos: filas });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error TiDB";
+    console.error("[solicitudes-peatonales GET]", msg);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   } finally {
     if (conn) await conn.end();
@@ -72,9 +90,12 @@ export async function POST(req: Request) {
     const zonaNombre = `Zona ${zonaNum + 1}`;
 
     conn = await obtenerConexion();
-    await asegurarTabla(conn);
 
     const fechaHora = obtenerFechaHoraMexico();
+    // Truncar hora_solicitud a 12 chars (limite del VARCHAR(12) en TiDB)
+    // toLocaleTimeString en es-MX puede generar "2:18:17 a. m." (14 chars)
+    const horaRaw = (hora_solicitud && String(hora_solicitud).trim()) || fechaHora.slice(11, 19);
+    const horaFinal = horaRaw.slice(0, 12);
 
     const [resultado] = await conn.execute(
       `INSERT INTO solicitudes_peatonales
@@ -84,7 +105,7 @@ export async function POST(req: Request) {
         fechaHora,
         zonaNum,
         zonaNombre,
-        hora_solicitud || fechaHora.slice(11), // fallback a hora actual
+        horaFinal,
         Number(segundos_espera) || 0,
         atendida ? 1 : 0,
       ]
@@ -93,6 +114,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, resultado });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error TiDB";
+    console.error("[solicitudes-peatonales POST]", msg);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   } finally {
     if (conn) await conn.end();
